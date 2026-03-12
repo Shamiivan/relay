@@ -25,3 +25,28 @@ Read the repo by following one request through the system.
 
 Use `pnpm dev` to start Convex, the local worker, and the Discord bot together.
 Use `pnpm check` to typecheck the full repo.
+
+## Connect Gmail
+
+Relay already calls Gmail from the worker. To connect an actual mailbox, you need Google OAuth client credentials plus one refresh token in `.env.local`.
+
+Add these keys:
+
+```env
+CONVEX_URL=...
+DISCORD_TOKEN=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REFRESH_TOKEN=...
+```
+
+Create a Google OAuth app with Gmail API enabled and add one redirect URI, for example `http://127.0.0.1:3000/oauth2callback`.
+
+Generate the refresh token in two steps:
+
+```bash
+pnpm gmail:connect -- --redirect-uri=http://127.0.0.1:3000/oauth2callback
+pnpm gmail:connect -- --redirect-uri=http://127.0.0.1:3000/oauth2callback --code=PASTE_CODE_HERE
+```
+
+The second command prints the `GOOGLE_REFRESH_TOKEN` value to place in `.env.local`.

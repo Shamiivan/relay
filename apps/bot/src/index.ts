@@ -1,48 +1,25 @@
 /**
  * Discord transport entry point for Relay.
- * Keep this file thin and delegate workflow to Convex.
+ * Keep this file thin and separate transport from execution.
  */
-import { ConvexHttpClient } from "convex/browser";
+import { ConvexClient, ConvexHttpClient } from "convex/browser";
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { createLogger } from "../../../packages/logger/src";
 import { loadEnv } from "./env";
 
 /**
- * Polls Convex until the scheduled run finishes or fails.
- * This keeps the bot simple until we add subscriptions or callbacks.
- */
-async function waitForRunResult(
-  client: ConvexHttpClient,
-  runId: Id<"runs">,
-): Promise<string> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const run = await client.query(api.runs.get, { runId });
-    if (!run) {
-      return "Run not found.";
-    }
-
-    if (run.status === "finished") {
-      return run.outputText ?? "Run finished without output.";
-    }
-
-    if (run.status === "failed") {
-      return run.errorMessage ?? `Run failed: ${run.errorType ?? "unknown_error"}`;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-
-  return "Run queued. Check Convex for the final result.";
-}
-
-/**
  * Starts the Discord client and bridges messages into Convex runs.
- * The bot does transport only and leaves agent work to the backend.
+ * The bot only enqueues runs and delivers terminal results.
  */
 export async function startBot(): Promise<void> {
   const env = loadEnv();
+  const logger = createLogger({
+    level: env.LOG_LEVEL,
+    service: "bot",
+  });
   const convex = new ConvexHttpClient(env.CONVEX_URL);
+  const convexSubscription = new ConvexClient(env.CONVEX_URL);
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -53,7 +30,55 @@ export async function startBot(): Promise<void> {
   });
 
   client.once(Events.ClientReady, (readyClient) => {
-    console.log(`Relay bot logged in as ${readyClient.user.tag}`);
+    logger.info("bot_started", {
+      userTag: readyClient.user.tag,
+    });
+  });
+
+  const deliveringRunIds = new Set<string>();
+
+  convexSubscription.onUpdate(api.runs.listDeliverable, {}, async (runs) => {
+    for (const run of runs) {
+      if (deliveringRunIds.has(run._id)) {
+        continue;
+      }
+
+      const runLogger = logger.child({
+        runId: run._id,
+        channelId: run.channelId,
+        userId: run.userId,
+      });
+      deliveringRunIds.add(run._id);
+
+      try {
+        if (!run.channelId) {
+          throw new Error(`Run is missing channelId: ${run._id}`);
+        }
+
+        const channel = await client.channels.fetch(run.channelId);
+        if (!channel?.isTextBased() || !("send" in channel)) {
+          throw new Error(`Channel is not text-based: ${run.channelId}`);
+        }
+
+        const text =
+          run.status === "finished"
+            ? run.outputText ?? "Run finished without output."
+            : run.errorMessage ?? `Run failed: ${run.errorType ?? "unknown_error"}`;
+
+        runLogger.info("run_delivery_started", {
+          status: run.status,
+        });
+        await channel.send(`<@${run.userId}> ${text}`);
+        await convex.mutation(api.runs.markDelivered, { runId: run._id });
+        runLogger.info("run_delivery_completed");
+      } catch (error) {
+        runLogger.error("run_delivery_failed", {
+          error,
+        });
+      } finally {
+        deliveringRunIds.delete(run._id);
+      }
+    }
   });
 
   client.on(Events.MessageCreate, async (message) => {
@@ -64,10 +89,15 @@ export async function startBot(): Promise<void> {
     const runId = await convex.mutation(api.runs.create, {
       message: message.content.trim(),
       userId: message.author.id,
+      channelId: message.channelId,
       specialistId: "communication",
     });
-    const outputText = await waitForRunResult(convex, runId);
-    await message.reply(outputText);
+    logger.info("run_enqueued", {
+      runId,
+      channelId: message.channelId,
+      userId: message.author.id,
+    });
+    await message.reply("Queued.");
   });
 
   await client.login(env.DISCORD_TOKEN);

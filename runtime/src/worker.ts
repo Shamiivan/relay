@@ -7,9 +7,18 @@ import path from "node:path";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
-import { gmail } from "../../packages/adapters/gmail/src";
-import type { GmailEnv, GmailSearchResult, SpecialistConfig } from "../../packages/contracts/src";
+import {
+  gmail,
+  gmailToolDeclarations,
+  readInput,
+  searchInput,
+  searchSenderInput,
+} from "../../packages/adapters/gmail/src";
+import type { GmailEnv, SpecialistConfig } from "../../packages/contracts/src";
 import { specialistConfigSchema } from "../../packages/contracts/src";
+import { createLogger } from "../../packages/logger/src";
+import { createModelClient } from "../../packages/model/src/provider";
+import type { ModelMessage } from "../../packages/model/src";
 import { loadRuntimeEnv } from "./env";
 
 function repoPath(relativePath: string): string {
@@ -40,57 +49,271 @@ async function loadContext(contextFiles: string[]): Promise<string> {
   return chunks.join("\n\n").trim();
 }
 
-function formatSearchResult(result: GmailSearchResult): string {
-  if (result.emails.length === 0) {
-    return "No matching emails found.";
+type RuntimeEnv = GmailEnv & {
+  LOG_LEVEL: string;
+  TRACE_DIR: string;
+  MODEL_PROVIDER: string;
+  MODEL_NAME: string;
+  GEMINI_API_KEY: string;
+};
+
+type RunTraceKind =
+  | "run_started"
+  | "model_request"
+  | "model_response"
+  | "tool_call"
+  | "tool_result"
+  | "run_finished"
+  | "run_failed";
+
+function createTraceFilePath(traceDir: string, runId: string): string {
+  return repoPath(path.join(traceDir, `${new Date().toISOString().replaceAll(":", "-")}_${runId}.log`));
+}
+
+function tracePath(traceDir: string, runId: string): string {
+  return createTraceFilePath(traceDir, runId);
+}
+
+function formatTraceBlock(kind: RunTraceKind, data: unknown): string {
+  return [
+    `=== ${kind} ===`,
+    JSON.stringify(data, null, 2),
+    "",
+  ].join("\n");
+}
+
+async function initializeTraceFile(
+  traceDir: string,
+  run: Doc<"runs">,
+  env: RuntimeEnv,
+  prompt: string,
+  context: string,
+): Promise<string> {
+  const filePath = createTraceFilePath(traceDir, run._id);
+  await fs.mkdir(repoPath(traceDir), { recursive: true });
+  const header = [
+    `runId: ${run._id}`,
+    `userId: ${run.userId}`,
+    `channelId: ${run.channelId}`,
+    `specialistId: ${run.specialistId}`,
+    `modelProvider: ${env.MODEL_PROVIDER}`,
+    `modelName: ${env.MODEL_NAME}`,
+    `startedAt: ${new Date().toISOString()}`,
+    "",
+    "=== user_message ===",
+    run.message,
+    "",
+    "=== prompt ===",
+    prompt,
+    "",
+    "=== context ===",
+    context,
+    "",
+  ].join("\n");
+  await fs.writeFile(filePath, header, "utf8");
+  return filePath;
+}
+
+async function appendTraceEvent(
+  traceFile: string,
+  kind: RunTraceKind,
+  data: unknown,
+): Promise<void> {
+  await fs.appendFile(traceFile, formatTraceBlock(kind, data), "utf8");
+}
+
+async function executeToolCall(
+  name: string,
+  args: unknown,
+  env: GmailEnv,
+): Promise<unknown> {
+  if (name === "gmail_search") {
+    const result = await gmail.actions.search.execute(searchInput.parse(args), env);
+    return result.ok ? result.data : { error: result.error };
   }
 
-  const lines = result.emails.map((email, index) => {
-    const subject = email.subject || "(no subject)";
-    const from = email.from || "unknown sender";
-    const date = email.date || "unknown date";
-    const snippet = email.snippet.trim();
-    return `${index + 1}. ${subject} | ${from} | ${date}${snippet ? `\n${snippet}` : ""}`;
-  });
+  if (name === "gmail_read") {
+    const result = await gmail.actions.read.execute(readInput.parse(args), env);
+    return result.ok ? result.data : { error: result.error };
+  }
 
-  return [`Found ${result.total} matching emails.`, ...lines].join("\n");
+  if (name === "gmail_search_sender") {
+    const result = await gmail.actions.searchSender.execute(searchSenderInput.parse(args), env);
+    return result.ok ? result.data : { error: result.error };
+  }
+
+  return {
+    error: {
+      type: "validation",
+      field: "tool_name",
+      reason: `Unknown tool: ${name}`,
+    },
+  };
+}
+
+async function runAgentLoop(
+  convex: ConvexClient,
+  run: Doc<"runs">,
+  specialist: SpecialistConfig,
+  env: RuntimeEnv,
+  runLogger: ReturnType<typeof createLogger>,
+  traceFile: string,
+  systemInstruction: string,
+): Promise<string> {
+  const client = createModelClient(env);
+  const messages: ModelMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: run.message }],
+    },
+  ];
+  for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
+    runLogger.info("model_turn_started", {
+      turn: turn + 1,
+      modelProvider: env.MODEL_PROVIDER,
+      modelName: env.MODEL_NAME,
+    });
+
+    const request = {
+      systemInstruction,
+      messages,
+      tools: [...gmailToolDeclarations],
+    };
+    await appendTraceEvent(traceFile, "model_request", {
+      timestamp: new Date().toISOString(),
+      turn: turn + 1,
+      request,
+    });
+
+    const response = await client.generate(request);
+
+    runLogger.info("model_turn_completed", {
+      turn: turn + 1,
+      toolCallCount: response.toolCalls.length,
+      hasText: Boolean(response.text),
+    });
+    await appendTraceEvent(traceFile, "model_response", {
+      timestamp: new Date().toISOString(),
+      turn: turn + 1,
+      response,
+    });
+
+    if (response.parts.length > 0) {
+      messages.push({
+        role: "model",
+        parts: response.parts,
+      });
+    }
+
+    if (response.toolCalls.length === 0) {
+      if (response.text) {
+        return response.text;
+      }
+
+      break;
+    }
+
+    const toolResults = await Promise.all(
+      response.toolCalls.map(async (toolCall) => {
+        runLogger.info("tool_call_started", {
+          toolName: toolCall.name,
+          toolArgs: toolCall.args,
+        });
+        await appendTraceEvent(traceFile, "tool_call", {
+          timestamp: new Date().toISOString(),
+          toolCall,
+        });
+
+        await convex.mutation(api.events.append, {
+          runId: run._id,
+          kind: "tool_call",
+          text: JSON.stringify(toolCall),
+        });
+
+        const result = await executeToolCall(toolCall.name, toolCall.args, env);
+        runLogger.info("tool_call_completed", {
+          toolName: toolCall.name,
+          toolResult: result,
+        });
+        await appendTraceEvent(traceFile, "tool_result", {
+          timestamp: new Date().toISOString(),
+          name: toolCall.name,
+          result,
+        });
+        await convex.mutation(api.events.append, {
+          runId: run._id,
+          kind: "tool_result",
+          text: JSON.stringify({
+            name: toolCall.name,
+            result,
+          }),
+        });
+
+        return {
+          name: toolCall.name,
+          result,
+        };
+      }),
+    );
+
+    messages.push({
+      role: "user",
+      parts: toolResults.map((toolResult) => ({
+        type: "tool_result" as const,
+        name: toolResult.name,
+        result: toolResult.result,
+      })),
+    });
+  }
+
+  throw new Error("Model loop ended without a final response.");
 }
 
 async function processRun(
   convex: ConvexClient,
   run: Doc<"runs">,
-  env: GmailEnv,
+  env: RuntimeEnv,
+  processLogger: ReturnType<typeof createLogger>,
 ): Promise<void> {
+  const runLogger = processLogger.child({
+    runId: run._id,
+    specialistId: run.specialistId,
+    userId: run.userId,
+  });
+
   try {
-    const specialist = await loadSpecialistConfig(run.specialistId);
-    await loadPrompt(specialist.promptFile);
-    await loadContext(specialist.contextFiles);
-
-    const result = await gmail.actions.search.execute(
-      { query: run.message, maxResults: 5 },
-      env,
-    );
-
-    if (!result.ok) {
-      await convex.mutation(api.events.append, {
-        runId: run._id,
-        kind: "run_error",
-        text: result.error.type,
-      });
-      await convex.mutation(api.runs.fail, {
-        runId: run._id,
-        errorType: result.error.type,
-        errorMessage: "Gmail search failed",
-      });
-      return;
-    }
-
-    const outputText = formatSearchResult(result.data);
-    await convex.mutation(api.events.append, {
-      runId: run._id,
-      kind: "tool_result",
-      text: JSON.stringify(result.data),
+    runLogger.info("run_started", {
+      message: run.message,
+      turnCount: run.turnCount,
     });
+    const specialist = await loadSpecialistConfig(run.specialistId);
+    const prompt = await loadPrompt(specialist.promptFile);
+    const context = await loadContext(specialist.contextFiles);
+    const systemInstruction = [prompt.trim(), context.trim()]
+      .filter(Boolean)
+      .join("\n\n");
+    const traceFile = await initializeTraceFile(
+      env.TRACE_DIR,
+      run,
+      env,
+      prompt,
+      context,
+    );
+    await appendTraceEvent(traceFile, "run_started", {
+      timestamp: new Date().toISOString(),
+      turnCount: run.turnCount,
+      systemInstruction,
+    });
+
+    const outputText = await runAgentLoop(
+      convex,
+      run,
+      specialist,
+      env,
+      runLogger,
+      traceFile,
+      systemInstruction,
+    );
     await convex.mutation(api.events.append, {
       runId: run._id,
       kind: "agent_output",
@@ -98,6 +321,13 @@ async function processRun(
     });
     await convex.mutation(api.runs.finish, {
       runId: run._id,
+      outputText,
+    });
+    await appendTraceEvent(traceFile, "run_finished", {
+      timestamp: new Date().toISOString(),
+      outputText,
+    });
+    runLogger.info("run_finished", {
       outputText,
     });
   } catch (error) {
@@ -112,11 +342,43 @@ async function processRun(
       errorType: "internal_error",
       errorMessage: message,
     });
+    const existingTraceFiles = await fs
+      .readdir(repoPath(env.TRACE_DIR))
+      .then((entries) =>
+        entries
+          .filter((entry) => entry.endsWith(`_${run._id}.log`))
+          .sort()
+          .map((entry) => repoPath(path.join(env.TRACE_DIR, entry))),
+      )
+      .catch(() => []);
+    const traceFile = existingTraceFiles.at(-1) ?? createTraceFilePath(env.TRACE_DIR, run._id);
+    try {
+      await fs.access(traceFile);
+      await appendTraceEvent(traceFile, "run_failed", {
+        timestamp: new Date().toISOString(),
+        message,
+      });
+    } catch {
+      const prompt = "";
+      const context = "";
+      await initializeTraceFile(env.TRACE_DIR, run, env, prompt, context);
+      await appendTraceEvent(traceFile, "run_failed", {
+        timestamp: new Date().toISOString(),
+        message,
+      });
+    }
+    runLogger.error("run_failed", {
+      error,
+    });
   }
 }
 
 export function startWorker(): void {
   const env = loadRuntimeEnv();
+  const processLogger = createLogger({
+    level: env.LOG_LEVEL,
+    service: "worker",
+  });
   const convex = new ConvexClient(env.CONVEX_URL);
 
   convex.onUpdate(api.runs.listPending, {}, async (pendingRuns) => {
@@ -124,17 +386,27 @@ export function startWorker(): void {
       return;
     }
 
+    processLogger.info("pending_runs_detected", {
+      count: pendingRuns.length,
+    });
+
     for (;;) {
       const run = await convex.mutation(api.runs.claim, {});
       if (!run) {
         break;
       }
 
-      await processRun(convex, run, env);
+      processLogger.info("run_claimed", {
+        runId: run._id,
+      });
+      await processRun(convex, run, env, processLogger);
     }
   });
 
-  console.log("Relay worker listening for pending runs");
+  processLogger.info("worker_started", {
+    modelProvider: env.MODEL_PROVIDER,
+    modelName: env.MODEL_NAME,
+  });
 }
 
 startWorker();

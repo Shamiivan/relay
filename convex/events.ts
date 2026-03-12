@@ -10,6 +10,7 @@ export const append = mutation({
     runId: v.id("runs"),
     kind: v.union(
       v.literal("user_message"),
+      v.literal("tool_call"),
       v.literal("tool_result"),
       v.literal("agent_output"),
       v.literal("run_error"),

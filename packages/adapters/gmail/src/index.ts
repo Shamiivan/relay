@@ -17,8 +17,14 @@ import { getGoogleAuth } from "./google-auth";
 
 const userId = "me";
 
-const searchInput = z.object({
+export const searchInput = z.object({
   query: z.string().min(1),
+  maxResults: z.number().int().min(1).max(10).default(5),
+});
+
+export const searchSenderInput = z.object({
+  sender: z.string().min(1),
+  terms: z.array(z.string().min(1)).max(5).default([]),
   maxResults: z.number().int().min(1).max(10).default(5),
 });
 
@@ -90,11 +96,110 @@ const searchDescriptor: ActionDescriptor = {
   scope: "read",
 };
 
+const searchSenderDescriptor: ActionDescriptor = {
+  tool: "gmail",
+  operation: "search_sender",
+  scope: "read",
+};
+
 const readDescriptor: ActionDescriptor = {
   tool: "gmail",
   operation: "read",
   scope: "read",
 };
+
+function toSenderQuery(sender: string, terms: string[]): string {
+  const trimmedSender = sender.trim();
+  const normalizedSender = trimmedSender.toLowerCase();
+  const compactSender = normalizedSender.replace(/[^a-z0-9]/g, "");
+  const quotedSender = `"${trimmedSender}"`;
+
+  const senderTerms = new Set<string>([
+    quotedSender,
+    trimmedSender,
+  ]);
+
+  if (compactSender && compactSender !== normalizedSender) {
+    senderTerms.add(compactSender);
+  }
+
+  if (/^[^\s@]+\.[^\s@]+$/.test(trimmedSender)) {
+    senderTerms.add(`from:${trimmedSender}`);
+  } else if (compactSender) {
+    senderTerms.add(`from:${compactSender}.com`);
+    senderTerms.add(`from:${compactSender}.io`);
+  }
+
+  const joinedSenderTerms = Array.from(senderTerms)
+    .map((term) => (term.startsWith("from:") ? term : `"${String(term).replaceAll("\"", "")}"`))
+    .join(" OR ");
+
+  const extraTerms = terms.map((term) => `"${term.trim().replaceAll("\"", "")}"`).join(" ");
+  return [joinedSenderTerms ? `(${joinedSenderTerms})` : "", extraTerms].filter(Boolean).join(" ");
+}
+
+export const gmailToolDeclarations = [
+  {
+    name: "gmail_search",
+    description:
+      "Search Gmail with a raw Gmail query. Use this when you already know the exact query syntax you want. For sender lookup, domain lookup, or company-name lookup, prefer gmail_search_sender.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "The Gmail search query to run. Examples: from:digitalocean.com, receipt digitalocean, subject:\"invoice\" newer_than:30d.",
+        },
+        maxResults: {
+          type: "integer",
+          description: "Maximum messages to return, between 1 and 10.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "gmail_search_sender",
+    description:
+      "Search Gmail for messages from a sender, person, or company using structured input. This is the preferred tool when the user names a sender like DigitalOcean, Alice, Stripe, or GitHub.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender: {
+          type: "string",
+          description: "Sender name, company name, email address, or domain fragment to search for.",
+        },
+        terms: {
+          type: "array",
+          description: "Optional extra keywords such as receipt, invoice, billing, welcome, or payment.",
+          items: {
+            type: "string",
+          },
+        },
+        maxResults: {
+          type: "integer",
+          description: "Maximum messages to return, between 1 and 10.",
+        },
+      },
+      required: ["sender"],
+    },
+  },
+  {
+    name: "gmail_read",
+    description: "Read a specific Gmail message in full when you already know the Gmail message id.",
+    parameters: {
+      type: "object",
+      properties: {
+        messageId: {
+          type: "string",
+          description: "The Gmail message id to read.",
+        },
+      },
+      required: ["messageId"],
+    },
+  },
+] as const;
 
 export const gmail = {
   id: "gmail",
@@ -146,6 +251,27 @@ export const gmail = {
               total: listResponse.data.resultSizeEstimate ?? emails.length,
             },
           };
+        } catch (error) {
+          return { ok: false, error: classifyError(error) };
+        }
+      },
+    },
+    searchSender: {
+      descriptor: searchSenderDescriptor,
+      async execute(
+        input: z.input<typeof searchSenderInput>,
+        env: GmailEnv,
+      ): Promise<AdapterResult<GmailSearchResult>> {
+        try {
+          const parsed = searchSenderInput.parse(input);
+          const query = toSenderQuery(parsed.sender, parsed.terms);
+          return await gmail.actions.search.execute(
+            {
+              query,
+              maxResults: parsed.maxResults,
+            },
+            env,
+          );
         } catch (error) {
           return { ok: false, error: classifyError(error) };
         }

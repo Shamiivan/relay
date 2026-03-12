@@ -9,6 +9,7 @@ export const create = mutation({
   args: {
     message: v.string(),
     userId: v.string(),
+    channelId: v.string(),
     specialistId: v.optional(v.string()),
   },
   /**
@@ -17,10 +18,12 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const runId = await ctx.db.insert("runs", {
       userId: args.userId,
+      channelId: args.channelId,
       message: args.message,
       specialistId: args.specialistId ?? "communication",
       status: "pending",
       turnCount: 0,
+      deliveryState: "queued",
     });
 
     await ctx.db.insert("events", {
@@ -43,6 +46,19 @@ export const get = query({
    */
   handler: async (ctx, args) => {
     return await ctx.db.get(args.runId);
+  },
+});
+
+export const listDeliverable = query({
+  args: {},
+  /**
+   * Returns finished or failed runs that the bot has not delivered yet.
+   */
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("runs")
+      .withIndex("by_delivery_state", (q) => q.eq("deliveryState", "ready"))
+      .collect();
   },
 });
 
@@ -100,6 +116,7 @@ export const finish = mutation({
       outputText: args.outputText,
       errorType: undefined,
       errorMessage: undefined,
+      deliveryState: "ready",
     });
   },
 });
@@ -119,6 +136,22 @@ export const fail = mutation({
       status: "failed",
       errorType: args.errorType,
       errorMessage: args.errorMessage,
+      deliveryState: "ready",
+    });
+  },
+});
+
+export const markDelivered = mutation({
+  args: {
+    runId: v.id("runs"),
+  },
+  /**
+   * Marks a terminal run as delivered by the transport layer.
+   */
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, {
+      deliveryState: "sent",
+      deliveredAt: Date.now(),
     });
   },
 });

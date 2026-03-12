@@ -27,7 +27,10 @@ Handles email, calendar, docs, campaigns — via Discord.
 - Parse boundaries with Zod and keep internal/result shapes explicit
 - Avoid `any`, implicit shapes, and `Record<string, unknown>` in core paths unless there is no stable schema yet
 
-**No BAML.** Anthropic SDK + Zod only.
+**No BAML.** Provider-agnostic model layer + Zod only.
+
+**use jsdoc for documentation** important for the human to understand teh code
+
 
 ---
 
@@ -36,7 +39,8 @@ Handles email, calendar, docs, campaigns — via Discord.
 - **TypeScript** (pnpm workspaces)
 - **Convex** — durable state + run/event store
 - **Runtime worker** — local Node process that claims pending runs and executes agent work
-- **Anthropic SDK** — `betaZodTool` + `toolRunner()` (handles tool loop)
+- **Model provider layer** — swappable LLM backend for tool calling + structured outputs
+- **Gemini** — first provider implementation
 - **Discord.js** — entry point + HITL transport
 - **Zod** — all validation, all type inference
 - **.md files** — memory/preferences (read-only v1, human-curated)
@@ -220,7 +224,7 @@ convex.onUpdate(api.runs.listPending, {}, async () => {
 type PolicyDecision = "allow" | "confirm" | "block"
 export function check(descriptor: ActionDescriptor): PolicyDecision { ... }
 
-// Inside betaZodTool.run:
+// Inside the model tool execution loop:
 const decision = policy.check(action.descriptor)
 if (decision === "block")   throw new Error("blocked_by_policy")
 if (decision === "confirm") {
@@ -299,6 +303,12 @@ Files to build:
 
 **Test:** *"what emails did Alice send me this week?"* → Gmail results returned → Discord responds
 
+Status:
+- The pipe exists today as a deterministic Gmail-read slice.
+- Gmail auth is connected locally.
+- The next step is replacing the hard-coded worker behavior with a provider-agnostic model tool loop.
+- Gemini is the starting provider, not a permanent architectural dependency.
+
 ### Phase 1 — Email Send + HITL (~100 lines)
 - `convex/humanTasks.ts`
 - `packages/policy/src/index.ts`
@@ -306,6 +316,9 @@ Files to build:
 - Bot: add global humanTasks subscription
 
 **Test:** *"email alice the meeting details"* → Discord approval before anything sends
+
+Dependency:
+- Build this after the model layer is choosing tool calls, so approval gates a model-selected `gmail.send` action instead of hard-coded branching.
 
 ### Phase 2 — Calendar Slice
 - `packages/adapters/gcal/src/index.ts` — findTime, createEvent
@@ -348,7 +361,7 @@ Files to build:
 | Part | Knows | Does NOT know |
 |------|-------|---------------|
 | `adapters/*` | External API, rate limits, Zod schemas | Specialists, Convex, prompts |
-| `policy/` | ActionDescriptor → decision | Provider SDKs, Anthropic, Convex |
+| `policy/` | ActionDescriptor → decision | Provider SDKs, model runtime, Convex |
 | `runtime/src/worker.ts` | Local file loading, adapters, execution loop | Discord transport |
 | `apps/bot/` | Discord API, Convex mutations | Agent logic, adapter internals |
 | `configs/*.json` | Specialist declaration | Runtime behavior |
