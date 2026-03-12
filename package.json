@@ -1,0 +1,9 @@
+{
+  "name": "relay",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "check": "tsc -p tsconfig.base.json --noEmit"
+  }
+}
