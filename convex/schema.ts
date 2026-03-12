@@ -6,19 +6,30 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  threads: defineTable({
+    userId: v.string(),
+    channelId: v.string(),
+    specialistId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_channel_user_specialist", ["channelId", "userId", "specialistId"]),
+
   runs: defineTable({
+    threadId: v.id("threads"),
     userId: v.string(),
     channelId: v.string(),
     message: v.string(),
     specialistId: v.string(),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("running"),
-      v.literal("paused"),
-      v.literal("finished"),
-      v.literal("failed"),
-    ),
+    status: v.union(v.literal("todo"), v.literal("doing"), v.literal("done")),
     turnCount: v.number(),
+    outcome: v.optional(
+      v.union(
+        v.literal("success"),
+        v.literal("error"),
+        v.literal("cancelled"),
+      ),
+    ),
+    waitingOn: v.optional(v.union(v.literal("none"), v.literal("human"))),
     outputText: v.optional(v.string()),
     errorType: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
@@ -30,9 +41,11 @@ export default defineSchema({
     deliveredAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
-    .index("by_delivery_state", ["deliveryState"]),
+    .index("by_delivery_state", ["deliveryState"])
+    .index("by_thread", ["threadId"]),
 
-  events: defineTable({
+  threadEvents: defineTable({
+    threadId: v.id("threads"),
     runId: v.id("runs"),
     kind: v.union(
       v.literal("user_message"),
@@ -43,5 +56,7 @@ export default defineSchema({
     ),
     text: v.string(),
     createdAt: v.number(),
-  }).index("by_run_created_at", ["runId", "createdAt"]),
+  })
+    .index("by_thread_created_at", ["threadId", "createdAt"])
+    .index("by_run_created_at", ["runId", "createdAt"]),
 });

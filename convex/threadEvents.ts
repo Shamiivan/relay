@@ -1,12 +1,13 @@
 /**
- * Event persistence for run history.
- * Events are append-only records used for debugging and replay.
+ * Event persistence for durable thread history.
+ * Thread events are the source of truth for what happened in a conversation.
  */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 export const append = mutation({
   args: {
+    threadId: v.id("threads"),
     runId: v.id("runs"),
     kind: v.union(
       v.literal("user_message"),
@@ -18,21 +19,25 @@ export const append = mutation({
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("events", {
+    await ctx.db.insert("threadEvents", {
       ...args,
       createdAt: Date.now(),
     });
   },
 });
 
-export const getByRun = query({
+export const getRecentByThread = query({
   args: {
-    runId: v.id("runs"),
+    threadId: v.id("threads"),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("events")
-      .withIndex("by_run_created_at", (q) => q.eq("runId", args.runId))
-      .collect();
+    const events = await ctx.db
+      .query("threadEvents")
+      .withIndex("by_thread_created_at", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(args.limit ?? 20);
+
+    return events.reverse();
   },
 });

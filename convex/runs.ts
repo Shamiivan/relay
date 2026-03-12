@@ -13,26 +13,57 @@ export const create = mutation({
     specialistId: v.optional(v.string()),
   },
   /**
-   * Creates a durable run and appends the initial user event.
+   * Finds or creates a durable thread, then enqueues a run against it.
    */
   handler: async (ctx, args) => {
+    const specialistId = args.specialistId ?? "communication";
+    const existingThread = await ctx.db
+      .query("threads")
+      .withIndex("by_channel_user_specialist", (q) =>
+        q
+          .eq("channelId", args.channelId)
+          .eq("userId", args.userId)
+          .eq("specialistId", specialistId),
+      )
+      .first();
+    const now = Date.now();
+
+    const threadId =
+      existingThread?._id ??
+      (await ctx.db.insert("threads", {
+        userId: args.userId,
+        channelId: args.channelId,
+        specialistId,
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+    if (existingThread) {
+      await ctx.db.patch(existingThread._id, {
+        updatedAt: now,
+      });
+    }
+
     const runId = await ctx.db.insert("runs", {
+      threadId,
       userId: args.userId,
       channelId: args.channelId,
       message: args.message,
-      specialistId: args.specialistId ?? "communication",
-      status: "pending",
+      specialistId,
+      status: "todo",
       turnCount: 0,
+      waitingOn: "none",
       deliveryState: "queued",
     });
 
-    await ctx.db.insert("events", {
+    await ctx.db.insert("threadEvents", {
+      threadId,
       runId,
       kind: "user_message",
       text: args.message,
-      createdAt: Date.now(),
+      createdAt: now,
     });
-    return runId;
+    return { runId, threadId };
   },
 });
 
@@ -62,12 +93,12 @@ export const listDeliverable = query({
   },
 });
 
-export const listPending = query({
+export const listTodo = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db
       .query("runs")
-      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .withIndex("by_status", (q) => q.eq("status", "todo"))
       .collect();
   },
 });
@@ -81,7 +112,7 @@ export const claim = mutation({
   handler: async (ctx) => {
     const run = await ctx.db
       .query("runs")
-      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .withIndex("by_status", (q) => q.eq("status", "todo"))
       .first();
 
     if (!run) {
@@ -89,14 +120,16 @@ export const claim = mutation({
     }
 
     await ctx.db.patch(run._id, {
-      status: "running",
+      status: "doing",
       turnCount: run.turnCount + 1,
+      waitingOn: "none",
     });
 
     return {
       ...run,
-      status: "running" as const,
+      status: "doing" as const,
       turnCount: run.turnCount + 1,
+      waitingOn: "none" as const,
     };
   },
 });
@@ -112,7 +145,9 @@ export const finish = mutation({
    */
   handler: async (ctx, args) => {
     await ctx.db.patch(args.runId, {
-      status: "finished",
+      status: "done",
+      outcome: "success",
+      waitingOn: "none",
       outputText: args.outputText,
       errorType: undefined,
       errorMessage: undefined,
@@ -133,7 +168,9 @@ export const fail = mutation({
    */
   handler: async (ctx, args) => {
     await ctx.db.patch(args.runId, {
-      status: "failed",
+      status: "done",
+      outcome: "error",
+      waitingOn: "none",
       errorType: args.errorType,
       errorMessage: args.errorMessage,
       deliveryState: "ready",

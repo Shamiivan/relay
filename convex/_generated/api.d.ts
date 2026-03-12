@@ -8,8 +8,8 @@
  * @module
  */
 
-import type * as events from "../events.js";
 import type * as runs from "../runs.js";
+import type * as threadEvents from "../threadEvents.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +18,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  events: typeof events;
   runs: typeof runs;
+  threadEvents: typeof threadEvents;
 }>;
 
 /**

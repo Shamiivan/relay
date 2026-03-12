@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
-import type { Doc } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import {
   gmail,
   gmailToolDeclarations,
@@ -70,16 +70,83 @@ function createTraceFilePath(traceDir: string, runId: string): string {
   return repoPath(path.join(traceDir, `${new Date().toISOString().replaceAll(":", "-")}_${runId}.log`));
 }
 
-function tracePath(traceDir: string, runId: string): string {
-  return createTraceFilePath(traceDir, runId);
-}
-
 function formatTraceBlock(kind: RunTraceKind, data: unknown): string {
   return [
     `=== ${kind} ===`,
     JSON.stringify(data, null, 2),
     "",
   ].join("\n");
+}
+
+function parseJsonSafely(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+type ThreadEventDoc = Doc<"threadEvents">;
+
+function buildHistoryMessages(events: ThreadEventDoc[], currentRunId: Id<"runs">): ModelMessage[] {
+  const messages: ModelMessage[] = [];
+
+  for (const event of events) {
+    if (event.runId === currentRunId && event.kind === "user_message") {
+      continue;
+    }
+
+    if (event.kind === "user_message") {
+      messages.push({
+        role: "user",
+        parts: [{ type: "text", text: event.text }],
+      });
+      continue;
+    }
+
+    if (event.kind === "agent_output") {
+      messages.push({
+        role: "model",
+        parts: [{ type: "text", text: event.text }],
+      });
+      continue;
+    }
+
+    if (event.kind === "tool_call") {
+      const data = parseJsonSafely(event.text) as { name?: string; args?: unknown };
+      if (!data || typeof data !== "object" || typeof data.name !== "string") {
+        continue;
+      }
+
+      messages.push({
+        role: "model",
+        parts: [{ type: "tool_call", name: data.name, args: data.args ?? {} }],
+      });
+      continue;
+    }
+
+    if (event.kind === "tool_result") {
+      const data = parseJsonSafely(event.text) as { name?: string; result?: unknown };
+      if (!data || typeof data !== "object" || typeof data.name !== "string") {
+        continue;
+      }
+
+      messages.push({
+        role: "user",
+        parts: [{ type: "tool_result", name: data.name, result: data.result }],
+      });
+      continue;
+    }
+
+    if (event.kind === "run_error") {
+      messages.push({
+        role: "model",
+        parts: [{ type: "text", text: `Previous error: ${event.text}` }],
+      });
+    }
+  }
+
+  return messages;
 }
 
 async function initializeTraceFile(
@@ -93,6 +160,7 @@ async function initializeTraceFile(
   await fs.mkdir(repoPath(traceDir), { recursive: true });
   const header = [
     `runId: ${run._id}`,
+    `threadId: ${run.threadId}`,
     `userId: ${run.userId}`,
     `channelId: ${run.channelId}`,
     `specialistId: ${run.specialistId}`,
@@ -161,12 +229,23 @@ async function runAgentLoop(
   systemInstruction: string,
 ): Promise<string> {
   const client = createModelClient(env);
+  const historyEvents = await convex.query(api.threadEvents.getRecentByThread, {
+    threadId: run.threadId,
+    limit: 30,
+  });
   const messages: ModelMessage[] = [
+    ...buildHistoryMessages(historyEvents, run._id),
     {
       role: "user",
       parts: [{ type: "text", text: run.message }],
     },
   ];
+  await appendTraceEvent(traceFile, "run_started", {
+    timestamp: new Date().toISOString(),
+    turnCount: run.turnCount,
+    historyEventCount: historyEvents.length,
+    systemInstruction,
+  });
   for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
     runLogger.info("model_turn_started", {
       turn: turn + 1,
@@ -224,7 +303,8 @@ async function runAgentLoop(
           toolCall,
         });
 
-        await convex.mutation(api.events.append, {
+        await convex.mutation(api.threadEvents.append, {
+          threadId: run.threadId,
           runId: run._id,
           kind: "tool_call",
           text: JSON.stringify(toolCall),
@@ -240,7 +320,8 @@ async function runAgentLoop(
           name: toolCall.name,
           result,
         });
-        await convex.mutation(api.events.append, {
+        await convex.mutation(api.threadEvents.append, {
+          threadId: run.threadId,
           runId: run._id,
           kind: "tool_result",
           text: JSON.stringify({
@@ -299,12 +380,6 @@ async function processRun(
       prompt,
       context,
     );
-    await appendTraceEvent(traceFile, "run_started", {
-      timestamp: new Date().toISOString(),
-      turnCount: run.turnCount,
-      systemInstruction,
-    });
-
     const outputText = await runAgentLoop(
       convex,
       run,
@@ -314,7 +389,8 @@ async function processRun(
       traceFile,
       systemInstruction,
     );
-    await convex.mutation(api.events.append, {
+    await convex.mutation(api.threadEvents.append, {
+      threadId: run.threadId,
       runId: run._id,
       kind: "agent_output",
       text: outputText,
@@ -332,7 +408,8 @@ async function processRun(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker failure";
-    await convex.mutation(api.events.append, {
+    await convex.mutation(api.threadEvents.append, {
+      threadId: run.threadId,
       runId: run._id,
       kind: "run_error",
       text: message,
@@ -381,7 +458,7 @@ export function startWorker(): void {
   });
   const convex = new ConvexClient(env.CONVEX_URL);
 
-  convex.onUpdate(api.runs.listPending, {}, async (pendingRuns) => {
+  convex.onUpdate(api.runs.listTodo, {}, async (pendingRuns) => {
     if (pendingRuns.length === 0) {
       return;
     }

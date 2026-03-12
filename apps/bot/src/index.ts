@@ -61,7 +61,7 @@ export async function startBot(): Promise<void> {
         }
 
         const text =
-          run.status === "finished"
+          run.outcome === "success"
             ? run.outputText ?? "Run finished without output."
             : run.errorMessage ?? `Run failed: ${run.errorType ?? "unknown_error"}`;
 
@@ -86,7 +86,7 @@ export async function startBot(): Promise<void> {
       return;
     }
 
-    const runId = await convex.mutation(api.runs.create, {
+    const { runId, threadId } = await convex.mutation(api.runs.create, {
       message: message.content.trim(),
       userId: message.author.id,
       channelId: message.channelId,
@@ -94,6 +94,7 @@ export async function startBot(): Promise<void> {
     });
     logger.info("run_enqueued", {
       runId,
+      threadId,
       channelId: message.channelId,
       userId: message.author.id,
     });
