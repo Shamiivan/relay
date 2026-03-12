@@ -22,6 +22,11 @@ Handles email, calendar, docs, campaigns — via Discord.
 - Fail noisily → named errors, never regex parsing
 - Silence is success → no output unless something needs attention
 
+**Typing rule:**
+- Strong typing by default
+- Parse boundaries with Zod and keep internal/result shapes explicit
+- Avoid `any`, implicit shapes, and `Record<string, unknown>` in core paths unless there is no stable schema yet
+
 **No BAML.** Anthropic SDK + Zod only.
 
 ---
@@ -29,12 +34,13 @@ Handles email, calendar, docs, campaigns — via Discord.
 ## Stack
 
 - **TypeScript** (pnpm workspaces)
-- **Convex** — durable state + scheduler (IS the queue, no polling worker)
+- **Convex** — durable state + run/event store
+- **Runtime worker** — local Node process that claims pending runs and executes agent work
 - **Anthropic SDK** — `betaZodTool` + `toolRunner()` (handles tool loop)
 - **Discord.js** — entry point + HITL transport
 - **Zod** — all validation, all type inference
 - **.md files** — memory/preferences (read-only v1, human-curated)
-- **YAML** — specialist registry + policy table (declaration, not code)
+- **JSON** — specialist registry + policy table (declaration, not code)
 
 ---
 
@@ -56,12 +62,12 @@ relay/
 │   └── bot/              ← Discord transport only. Calls Convex mutations.
 │
 ├── configs/
-│   ├── specialists/      ← YAML (declaration only, no code)
-│   │   ├── scheduling.yaml
-│   │   ├── communication.yaml
-│   │   ├── knowledge.yaml
-│   │   └── email-campaigner.yaml
-│   └── policies.yaml     ← flat rules: scope/flags → policy decision
+│   ├── specialists/      ← JSON (declaration only, no code)
+│   │   ├── scheduling.json
+│   │   ├── communication.json
+│   │   ├── knowledge.json
+│   │   └── email-campaigner.json
+│   └── policies.json     ← flat rules: scope/flags → policy decision
 │
 ├── prompts/              ← system prompt .md files (versioned, editable)
 │   ├── scheduling.system.md
@@ -75,13 +81,16 @@ relay/
 │   ├── time-tracker.md   ← spreadsheetId, column mapping
 │   └── clients/
 │
-└── convex/               ← all durable state + scheduler
+├── runtime/              ← local worker process for agent execution
+│   └── src/
+│       └── worker.ts     ← claims pending runs, loads local files, calls adapters
+│
+└── convex/               ← all durable state
     ├── schema.ts         ← runs, events, humanTasks, memory
-    ├── runs.ts           ← create (+ scheduler), finish, pause, fail
-    ├── events.ts         ← append (typed), getByThread
+    ├── runs.ts           ← create, listPending, claim, finish, fail
+    ├── events.ts         ← append (typed), getByRun
     ├── humanTasks.ts     ← create, resolve, listOpen
-    ├── memory.ts         ← agent-inferred preferences
-    └── agent.ts          ← internalAction: Anthropic toolRunner
+    └── memory.ts         ← agent-inferred preferences
 ```
 
 ---
@@ -142,45 +151,51 @@ Rules:
 
 ---
 
-## How Convex + Anthropic SDK fit together
+## How Convex + Worker fit together
 
 ```typescript
-// convex/runs.ts — mutation schedules internalAction (Convex IS the queue)
+// convex/runs.ts — mutation inserts a pending run
 export const create = mutation({
   handler: async (ctx, { message, userId }) => {
-    const runId = await ctx.db.insert("runs", { message, userId, status: "pending", turnCount: 0 })
-    await ctx.scheduler.runAfter(0, internal.agent.runAgentTurn, { runId })
+    const runId = await ctx.db.insert("runs", {
+      message,
+      userId,
+      status: "pending",
+      turnCount: 0
+    })
   }
 })
 
-// convex/agent.ts — internalAction runs the turn
-export const runAgentTurn = internalAction({
-  handler: async (ctx, { runId }) => {
-    const run     = await ctx.runQuery(api.runs.get, { runId })
-    const spec    = loadSpecialist(run.specialistId)   // reads YAML
-    const prompt  = fs.readFileSync(spec.promptFile)   // reads prompts/*.md
-    const context = loadContextFiles(spec.contextFiles) // reads context/*.md
-    const history = await ctx.runQuery(api.events.getByThread, { threadId: run.threadId })
+// runtime/src/worker.ts — local process claims and executes pending work
+convex.onUpdate(api.runs.listPending, {}, async () => {
+  for (;;) {
+    const run = await convex.mutation(api.runs.claim, {})
+    if (!run) break
 
-    if (run.turnCount >= spec.maxTurns) {
-      await ctx.runMutation(api.runs.fail, { runId, error: "max_turns_exceeded" })
-      return
+    const spec    = loadSpecialist(run.specialistId)     // reads JSON locally
+    const prompt  = fs.readFileSync(spec.promptFile)     // reads prompts/*.md locally
+    const context = loadContextFiles(spec.contextFiles)  // reads context/*.md locally
+
+    const result = await gmail.search({ query: run.message })
+
+    if (!result.ok) {
+      await convex.mutation(api.runs.fail, {
+        runId: run._id,
+        errorType: result.error.type,
+        errorMessage: "Gmail search failed"
+      })
+      continue
     }
 
-    // build betaZodTools from adapter actions + policy guard
-    const tools = buildTools(spec.tools, ctx, runId)
-
-    // SDK handles the entire tool loop — no manual loop needed
-    const result = await anthropic.beta.messages.toolRunner({
-      model: "claude-sonnet-4-6",
-      system: `${prompt}\n\n## Context\n${context}`,
-      messages: history,
-      tools,
-      max_tokens: 4096,
-      max_iterations: spec.maxTurns - run.turnCount
+    await convex.mutation(api.events.append, {
+      runId: run._id,
+      kind: "agent_output",
+      text: formatSearchResult(result.data)
     })
-
-    await ctx.runMutation(api.runs.finish, { runId, result: result.content })
+    await convex.mutation(api.runs.finish, {
+      runId: run._id,
+      outputText: formatSearchResult(result.data)
+    })
   }
 })
 ```
@@ -189,14 +204,15 @@ export const runAgentTurn = internalAction({
 
 ## Policy
 
-```yaml
-# configs/policies.yaml — flat, no DSL, no conditionals
-- scope: read                              → allow
-- scope: write                             → allow
-- scope: schedule                          → allow
-- tool: gmail,     operation: send         → confirm
-- tool: instantly, operation: schedule     → always-hitl
-- scope: admin                             → confirm
+```json
+[
+  { "scope": "read", "decision": "allow" },
+  { "scope": "write", "decision": "allow" },
+  { "scope": "schedule", "decision": "allow" },
+  { "tool": "gmail", "operation": "send", "decision": "confirm" },
+  { "tool": "instantly", "operation": "schedule", "decision": "confirm" },
+  { "scope": "admin", "decision": "confirm" }
+]
 ```
 
 ```typescript
@@ -220,27 +236,28 @@ if (decision === "confirm") {
 ## Durable HITL
 
 ```
-Tool hits "confirm" → humanTask created → run paused → internalAction exits
+Tool hits "confirm" → humanTask created → run paused → worker stops processing that run
 
 Bot: global subscription to humanTasks { status: "pending" }
   → posts in Discord: "Approve: gmail.send to alice@co.com?"
 
-User: "yes" → bot resolves humanTask → Convex re-queues run via scheduler
-  → internalAction resumes → executes approved call
+User: "yes" → bot resolves humanTask → run moves back to pending
+  → worker claims it again → executes approved call
 ```
 
 ---
 
 ## Specialist Config
 
-```yaml
-# configs/specialists/communication.yaml
-id: communication
-promptFile: prompts/communication.system.md
-triggers: [email, mail, inbox, message, reply]
-tools: [gmail]
-maxTurns: 8
-contextFiles: [context/global.md]
+```json
+{
+  "id": "communication",
+  "promptFile": "prompts/communication.system.md",
+  "triggers": ["email", "mail", "inbox", "message", "reply"],
+  "tools": ["gmail"],
+  "maxTurns": 8,
+  "contextFiles": ["context/global.md"]
+}
 ```
 
 ```markdown
@@ -272,10 +289,10 @@ User context is below.
 ### Phase 0 — Email Read Slice (~200-300 lines, proves the pipe)
 Files to build:
 - `convex/schema.ts` — runs table
-- `convex/runs.ts` — create + finish
-- `convex/agent.ts` — internalAction + toolRunner
+- `convex/runs.ts` — create + claim + finish
+- `runtime/src/worker.ts` — local worker + Gmail execution
 - `packages/adapters/gmail/src/index.ts` — search, read
-- `configs/specialists/communication.yaml`
+- `configs/specialists/communication.json`
 - `prompts/communication.system.md`
 - `context/global.md`
 - `apps/bot/src/index.ts` — Discord → runs.create, watch for result
@@ -292,7 +309,7 @@ Files to build:
 
 ### Phase 2 — Calendar Slice
 - `packages/adapters/gcal/src/index.ts` — findTime, createEvent
-- `configs/specialists/scheduling.yaml`
+- `configs/specialists/scheduling.json`
 - `prompts/scheduling.system.md`
 - `context/board-meeting.md`
 
@@ -305,11 +322,11 @@ Files to build:
 
 ### Phase 4 — Second Specialist (extensibility proof)
 - `packages/adapters/gsheets/src/index.ts`
-- `configs/specialists/knowledge.yaml`
+- `configs/specialists/knowledge.json`
 - `prompts/knowledge.system.md`
 - `context/time-tracker.md`
 
-**Test:** *"update time tracker from Alice's email"* → zero changes to agent.ts, bot, or communication files
+**Test:** *"update time tracker from Alice's email"* → zero changes to worker, bot, or communication files
 
 ---
 
@@ -317,12 +334,12 @@ Files to build:
 
 1. `packages/adapters/apollo/` — Apollo API wrapper
 2. `packages/adapters/instantly/` — Instantly API wrapper
-3. `configs/specialists/email-campaigner.yaml`
+3. `configs/specialists/email-campaigner.json`
 4. `prompts/email-campaigner.system.md`
 5. `context/email-campaigns.md`
-6. Entries in `configs/policies.yaml` for bulk send
+6. Entries in `configs/policies.json` for bulk send
 
-**Zero changes** to: agent.ts, bot, other specialists, Convex schema.
+**Zero changes** to: worker.ts, bot, other specialists, Convex schema.
 
 ---
 
@@ -332,8 +349,8 @@ Files to build:
 |------|-------|---------------|
 | `adapters/*` | External API, rate limits, Zod schemas | Specialists, Convex, prompts |
 | `policy/` | ActionDescriptor → decision | Provider SDKs, Anthropic, Convex |
-| `convex/agent.ts` | Anthropic SDK, adapters, policy | Discord, CLI details |
+| `runtime/src/worker.ts` | Local file loading, adapters, execution loop | Discord transport |
 | `apps/bot/` | Discord API, Convex mutations | Agent logic, adapter internals |
-| `configs/*.yaml` | Specialist declaration | Runtime behavior |
+| `configs/*.json` | Specialist declaration | Runtime behavior |
 | `prompts/*.md` | LLM instructions | Code, APIs, Convex |
 | `context/*.md` | User preferences | Everything runtime |

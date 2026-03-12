@@ -1,3 +1,3 @@
 # Convex
 
-Convex stores durable agent state and orchestrates runs. Keep workflow code simple and explicit.
+Convex is Relay's durable state layer. Runs and events live here, while the local worker performs execution.

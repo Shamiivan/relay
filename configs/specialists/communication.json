@@ -1,0 +1,9 @@
+{
+  "id": "communication",
+  "description": "Handles inbox search and email drafting.",
+  "promptFile": "prompts/communication.system.md",
+  "triggers": ["email", "mail", "inbox", "message", "reply"],
+  "tools": ["gmail"],
+  "maxTurns": 8,
+  "contextFiles": ["context/global.md"]
+}

@@ -1,3 +1,3 @@
 # Configs
 
-Configs declare what the agent can load. Keep them flat, readable, and free of runtime logic.
+Configs declare what the agent can load. Keep them as small JSON files with no runtime logic.

@@ -1,8 +1,0 @@
-id: communication
-promptFile: prompts/communication.system.md
-triggers: []
-tools:
-  - gmail
-maxTurns: 8
-contextFiles:
-  - context/global.md

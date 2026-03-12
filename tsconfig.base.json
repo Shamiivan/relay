@@ -3,6 +3,8 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "types": ["node"],
+    "esModuleInterop": true,
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true
@@ -10,6 +12,7 @@
   "include": [
     "apps/**/*.ts",
     "packages/**/*.ts",
+    "runtime/**/*.ts",
     "convex/**/*.ts"
   ]
 }
