@@ -65,6 +65,13 @@ async function loadToolPromptSection(tools: ToolManifest[]): Promise<string> {
   return chunks.filter(Boolean).join("\n\n").trim();
 }
 
+function buildSystemInstruction(parts: string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 type RuntimeEnv = ReturnType<typeof loadRuntimeEnv>;
 
 type RunTraceKind =
@@ -252,12 +259,13 @@ async function runAgentLoop(
   env: RuntimeEnv,
   runLogger: ReturnType<typeof createLogger>,
   traceFile: string,
-  systemInstruction: string,
+  baseSystemInstruction: string,
 ): Promise<string> {
   const client = createModelClient(env);
   const toolsByName = new Map(
     allowedTools.map((tool) => [tool.name, tool] as const),
   );
+  const activatedToolNames = new Set<string>();
   const historyEvents = await convex.query(api.threadEvents.getRecentByThread, {
     threadId: run.threadId,
     limit: 200,
@@ -273,7 +281,7 @@ async function runAgentLoop(
     timestamp: new Date().toISOString(),
     turnCount: run.turnCount,
     historyEventCount: historyEvents.length,
-    systemInstruction,
+    systemInstruction: baseSystemInstruction,
   });
   await appendTraceEvent(traceFile, "thread_messages", {
     timestamp: new Date().toISOString(),
@@ -282,6 +290,15 @@ async function runAgentLoop(
     rendered: formatThreadMessages(messages),
   });
   for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
+    const activatedTools = allowedTools.filter((tool) =>
+      activatedToolNames.has(tool.name),
+    );
+    const toolPromptSection = await loadToolPromptSection(activatedTools);
+    const systemInstruction = buildSystemInstruction([
+      baseSystemInstruction,
+      toolPromptSection,
+    ]);
+
     runLogger.info("model_turn_started", {
       turn: turn + 1,
       modelProvider: env.MODEL_PROVIDER,
@@ -347,6 +364,9 @@ async function runAgentLoop(
     const toolResults = await Promise.all(
       response.toolCalls.map(async (toolCall) => {
         const tool = toolsByName.get(toolCall.name);
+        if (tool) {
+          activatedToolNames.add(tool.name);
+        }
         runLogger.info("tool_call_started", {
           toolName: toolCall.name,
           toolArgs: toolCall.args,
@@ -426,10 +446,7 @@ async function processRun(
     const context = await loadContext(specialist.contextFiles);
     const allTools = await loadAllToolManifests();
     const allowedTools = getAllowedTools(specialist.tools, allTools);
-    const toolPromptSection = await loadToolPromptSection(allowedTools);
-    const systemInstruction = [prompt.trim(), context.trim(), toolPromptSection]
-      .filter(Boolean)
-      .join("\n\n");
+    const systemInstruction = buildSystemInstruction([prompt, context]);
     await initializeTraceFile(
       traceFile,
       run,
