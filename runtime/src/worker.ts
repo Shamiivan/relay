@@ -7,14 +7,14 @@ import path from "node:path";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
-import { providers } from "../../packages/adapters/src";
-import type { GmailEnv, SpecialistConfig, ToolAction } from "../../packages/contracts/src";
+import type { SpecialistConfig } from "../../packages/contracts/src";
 import { specialistConfigSchema } from "../../packages/contracts/src";
 import { createLogger } from "../../packages/logger/src";
 import { createModelClient } from "../../packages/model/src/provider";
 import type { ModelMessage } from "../../packages/model/src";
 import { loadRuntimeEnv } from "./env";
 import { buildRecentThreadMessages, formatThreadMessages } from "./thread";
+import { executeToolCommand, getAllowedTools, loadAllToolManifests, type ToolManifest } from "./tools";
 
 function repoPath(relativePath: string): string {
   return path.resolve(process.cwd(), relativePath);
@@ -44,13 +44,7 @@ async function loadContext(contextFiles: string[]): Promise<string> {
   return chunks.join("\n\n").trim();
 }
 
-type RuntimeEnv = GmailEnv & {
-  LOG_LEVEL: string;
-  TRACE_DIR: string;
-  MODEL_PROVIDER: string;
-  MODEL_NAME: string;
-  GEMINI_API_KEY: string;
-};
+type RuntimeEnv = ReturnType<typeof loadRuntimeEnv>;
 
 type RunTraceKind =
   | "run_started"
@@ -62,8 +56,6 @@ type RunTraceKind =
   | "tool_result"
   | "run_finished"
   | "run_failed";
-
-type RuntimeToolAction = ToolAction<RuntimeEnv>;
 
 function createTraceFilePath(traceDir: string): string {
   const now = new Date();
@@ -132,18 +124,14 @@ function formatTraceDetails(kind: RunTraceKind, data: unknown): string {
 
   if (kind === "tool_call") {
     const toolCall = Reflect.get(data, "toolCall");
-    const parsedArgs = Reflect.get(data, "parsedArgs");
     if (toolCall && typeof toolCall === "object") {
       const name = Reflect.get(toolCall, "name");
       const args = Reflect.get(toolCall, "args");
       return [
         `name: ${typeof name === "string" ? name : ""}`,
         "",
-        "raw args:",
+        "args:",
         formatValue(args),
-        "",
-        "parsed args:",
-        formatValue(parsedArgs),
       ].join("\n");
     }
   }
@@ -209,25 +197,21 @@ async function appendTraceEvent(
   await fs.appendFile(traceFile, formatTraceBlock(kind, data), "utf8");
 }
 
-function getAllowedActions(specialist: SpecialistConfig): RuntimeToolAction[] {
-  return specialist.tools.flatMap((toolId) => {
-    const provider = providers[toolId as keyof typeof providers];
-    if (!provider) {
-      throw new Error(`Unknown provider in specialist config: ${toolId}`);
-    }
-
-    return Object.values(provider.actions) as RuntimeToolAction[];
-  });
-}
-
 async function executeToolCall(
-  action: RuntimeToolAction | undefined,
+  tool: ToolManifest | undefined,
   args: unknown,
-  env: RuntimeEnv,
 ): Promise<unknown> {
-  if (action) {
-    const result = await action.execute(args, env);
-    return result.ok ? result.data : { error: result.error };
+  if (tool) {
+    try {
+      return await executeToolCommand(tool, args);
+    } catch (error) {
+      return {
+        error: {
+          type: "external_error",
+          message: error instanceof Error ? error.message : "Unknown tool execution error",
+        },
+      };
+    }
   }
 
   return {
@@ -237,20 +221,6 @@ async function executeToolCall(
       reason: "Unknown tool",
     },
   };
-}
-
-function inspectToolInput(action: RuntimeToolAction | undefined, args: unknown): unknown {
-  if (!action?.inspectInput) {
-    return null;
-  }
-
-  try {
-    return action.inspectInput(args);
-  } catch (error) {
-    return {
-      parseError: error instanceof Error ? error.message : "Unknown parse error",
-    };
-  }
 }
 
 async function runAgentLoop(
@@ -263,9 +233,10 @@ async function runAgentLoop(
   systemInstruction: string,
 ): Promise<string> {
   const client = createModelClient(env);
-  const allowedActions = getAllowedActions(specialist);
-  const actionsByName = new Map(
-    allowedActions.map((action) => [action.name, action] as const),
+  const allTools = await loadAllToolManifests();
+  const allowedTools = getAllowedTools(specialist.tools, allTools);
+  const toolsByName = new Map(
+    allowedTools.map((tool) => [tool.name, tool] as const),
   );
   const historyEvents = await convex.query(api.threadEvents.getRecentByThread, {
     threadId: run.threadId,
@@ -300,10 +271,10 @@ async function runAgentLoop(
     const request = {
       systemInstruction,
       messages,
-      tools: allowedActions.map((action) => ({
-        name: action.name,
-        description: action.description,
-        parameters: action.parameters,
+      tools: allowedTools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
       })),
     };
     await appendTraceEvent(traceFile, "model_request", {
@@ -355,17 +326,14 @@ async function runAgentLoop(
 
     const toolResults = await Promise.all(
       response.toolCalls.map(async (toolCall) => {
-        const action = actionsByName.get(toolCall.name);
-        const parsedArgs = inspectToolInput(action, toolCall.args);
+        const tool = toolsByName.get(toolCall.name);
         runLogger.info("tool_call_started", {
           toolName: toolCall.name,
           toolArgs: toolCall.args,
-          parsedArgs,
         });
         await appendTraceEvent(traceFile, "tool_call", {
           timestamp: new Date().toISOString(),
           toolCall,
-          parsedArgs,
         });
 
         await convex.mutation(api.threadEvents.append, {
@@ -375,7 +343,7 @@ async function runAgentLoop(
           text: JSON.stringify(toolCall),
         });
 
-        const result = await executeToolCall(action, toolCall.args, env);
+        const result = await executeToolCall(tool, toolCall.args);
         runLogger.info("tool_call_completed", {
           toolName: toolCall.name,
           toolResult: result,

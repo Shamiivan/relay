@@ -1,0 +1,22 @@
+{
+  "description": "Read cell values from a Google Sheets spreadsheet range using A1 notation.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "spreadsheetId": {
+        "type": "string",
+        "description": "The Google Sheets spreadsheet id."
+      },
+      "range": {
+        "type": "string",
+        "description": "The A1 range to read, for example Sheet1!A1:D20."
+      },
+      "majorDimension": {
+        "type": "string",
+        "enum": ["ROWS", "COLUMNS"],
+        "description": "Whether values should be grouped by rows or columns."
+      }
+    },
+    "required": ["spreadsheetId", "range"]
+  }
+}

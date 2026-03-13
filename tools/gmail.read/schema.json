@@ -1,0 +1,13 @@
+{
+  "description": "Read a specific Gmail message in full when you already know the Gmail message id.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "messageId": {
+        "type": "string",
+        "description": "The Gmail message id to read."
+      }
+    },
+    "required": ["messageId"]
+  }
+}
