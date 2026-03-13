@@ -5,18 +5,19 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+const defaultSpecialistId = "communication";
+
 export const create = mutation({
   args: {
     message: v.string(),
     userId: v.string(),
     channelId: v.string(),
-    specialistId: v.optional(v.string()),
   },
   /**
    * Finds or creates a durable thread, then enqueues a run against it.
    */
   handler: async (ctx, args) => {
-    const specialistId = args.specialistId ?? "communication";
+    const specialistId = defaultSpecialistId;
     const existingThread = await ctx.db
       .query("threads")
       .withIndex("by_channel_user_specialist", (q) =>
@@ -52,7 +53,6 @@ export const create = mutation({
       specialistId,
       status: "todo",
       turnCount: 0,
-      waitingOn: "none",
       deliveryState: "queued",
     });
 
@@ -122,14 +122,12 @@ export const claim = mutation({
     await ctx.db.patch(run._id, {
       status: "doing",
       turnCount: run.turnCount + 1,
-      waitingOn: "none",
     });
 
     return {
       ...run,
       status: "doing" as const,
       turnCount: run.turnCount + 1,
-      waitingOn: "none" as const,
     };
   },
 });
@@ -147,7 +145,6 @@ export const finish = mutation({
     await ctx.db.patch(args.runId, {
       status: "done",
       outcome: "success",
-      waitingOn: "none",
       outputText: args.outputText,
       errorType: undefined,
       errorMessage: undefined,
@@ -170,7 +167,6 @@ export const fail = mutation({
     await ctx.db.patch(args.runId, {
       status: "done",
       outcome: "error",
-      waitingOn: "none",
       errorType: args.errorType,
       errorMessage: args.errorMessage,
       deliveryState: "ready",

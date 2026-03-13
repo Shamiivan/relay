@@ -7,19 +7,14 @@ import path from "node:path";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
-import {
-  gmail,
-  gmailToolDeclarations,
-  readInput,
-  searchInput,
-  searchSenderInput,
-} from "../../packages/adapters/gmail/src";
-import type { GmailEnv, SpecialistConfig } from "../../packages/contracts/src";
+import { providers } from "../../packages/adapters/src";
+import type { GmailEnv, SpecialistConfig, ToolAction } from "../../packages/contracts/src";
 import { specialistConfigSchema } from "../../packages/contracts/src";
 import { createLogger } from "../../packages/logger/src";
 import { createModelClient } from "../../packages/model/src/provider";
 import type { ModelMessage } from "../../packages/model/src";
 import { loadRuntimeEnv } from "./env";
+import { buildRecentThreadMessages, formatThreadMessages } from "./thread";
 
 function repoPath(relativePath: string): string {
   return path.resolve(process.cwd(), relativePath);
@@ -59,105 +54,129 @@ type RuntimeEnv = GmailEnv & {
 
 type RunTraceKind =
   | "run_started"
+  | "thread_messages"
   | "model_request"
+  | "provider_request"
   | "model_response"
   | "tool_call"
   | "tool_result"
   | "run_finished"
   | "run_failed";
 
-function createTraceFilePath(traceDir: string, runId: string): string {
-  return repoPath(path.join(traceDir, `${new Date().toISOString().replaceAll(":", "-")}_${runId}.log`));
+type RuntimeToolAction = ToolAction<RuntimeEnv>;
+
+function createTraceFilePath(traceDir: string): string {
+  const now = new Date();
+  const localTimestamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-") + "_" + [
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0"),
+  ].join("-");
+
+  return repoPath(path.join(traceDir, `${localTimestamp}.log`));
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
+function formatLoopHeader(kind: RunTraceKind, data: unknown): string {
+  if (!data || typeof data !== "object" || !("turn" in data)) {
+    return kind;
+  }
+
+  const turn = Reflect.get(data, "turn");
+  return typeof turn === "number" ? `loop_${turn}.${kind}` : kind;
+}
+
+function formatTraceDetails(kind: RunTraceKind, data: unknown): string {
+  if (!data || typeof data !== "object") {
+    return formatValue(data);
+  }
+
+  if (kind === "thread_messages") {
+    const rendered = Reflect.get(data, "rendered");
+    return typeof rendered === "string" ? rendered : formatValue(data);
+  }
+
+  if (kind === "model_request") {
+    const toolNames = Reflect.get(data, "toolNames");
+    const renderedMessages = Reflect.get(data, "renderedMessages");
+    const lines = [
+      `tools: ${Array.isArray(toolNames) ? toolNames.join(", ") : ""}`,
+      "",
+      "messages:",
+      typeof renderedMessages === "string" ? renderedMessages : "",
+    ];
+
+    return lines.join("\n").trim();
+  }
+
+  if (kind === "model_response") {
+    const renderedParts = Reflect.get(data, "renderedParts");
+    return typeof renderedParts === "string" ? renderedParts : formatValue(data);
+  }
+
+  if (kind === "provider_request") {
+    const payload = Reflect.get(data, "payload");
+    return formatValue(payload);
+  }
+
+  if (kind === "tool_call") {
+    const toolCall = Reflect.get(data, "toolCall");
+    const parsedArgs = Reflect.get(data, "parsedArgs");
+    if (toolCall && typeof toolCall === "object") {
+      const name = Reflect.get(toolCall, "name");
+      const args = Reflect.get(toolCall, "args");
+      return [
+        `name: ${typeof name === "string" ? name : ""}`,
+        "",
+        "raw args:",
+        formatValue(args),
+        "",
+        "parsed args:",
+        formatValue(parsedArgs),
+      ].join("\n");
+    }
+  }
+
+  if (kind === "tool_result") {
+    const name = Reflect.get(data, "name");
+    const result = Reflect.get(data, "result");
+    return [
+      `name: ${typeof name === "string" ? name : ""}`,
+      "",
+      formatValue(result),
+    ].join("\n");
+  }
+
+  return formatValue(data);
 }
 
 function formatTraceBlock(kind: RunTraceKind, data: unknown): string {
   return [
-    `=== ${kind} ===`,
-    JSON.stringify(data, null, 2),
+    `=== ${formatLoopHeader(kind, data)} ===`,
+    formatTraceDetails(kind, data),
     "",
   ].join("\n");
 }
 
-function parseJsonSafely(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-type ThreadEventDoc = Doc<"threadEvents">;
-
-function buildHistoryMessages(events: ThreadEventDoc[], currentRunId: Id<"runs">): ModelMessage[] {
-  const messages: ModelMessage[] = [];
-
-  for (const event of events) {
-    if (event.runId === currentRunId && event.kind === "user_message") {
-      continue;
-    }
-
-    if (event.kind === "user_message") {
-      messages.push({
-        role: "user",
-        parts: [{ type: "text", text: event.text }],
-      });
-      continue;
-    }
-
-    if (event.kind === "agent_output") {
-      messages.push({
-        role: "model",
-        parts: [{ type: "text", text: event.text }],
-      });
-      continue;
-    }
-
-    if (event.kind === "tool_call") {
-      const data = parseJsonSafely(event.text) as { name?: string; args?: unknown };
-      if (!data || typeof data !== "object" || typeof data.name !== "string") {
-        continue;
-      }
-
-      messages.push({
-        role: "model",
-        parts: [{ type: "tool_call", name: data.name, args: data.args ?? {} }],
-      });
-      continue;
-    }
-
-    if (event.kind === "tool_result") {
-      const data = parseJsonSafely(event.text) as { name?: string; result?: unknown };
-      if (!data || typeof data !== "object" || typeof data.name !== "string") {
-        continue;
-      }
-
-      messages.push({
-        role: "user",
-        parts: [{ type: "tool_result", name: data.name, result: data.result }],
-      });
-      continue;
-    }
-
-    if (event.kind === "run_error") {
-      messages.push({
-        role: "model",
-        parts: [{ type: "text", text: `Previous error: ${event.text}` }],
-      });
-    }
-  }
-
-  return messages;
-}
-
 async function initializeTraceFile(
-  traceDir: string,
+  filePath: string,
   run: Doc<"runs">,
   env: RuntimeEnv,
   prompt: string,
   context: string,
 ): Promise<string> {
-  const filePath = createTraceFilePath(traceDir, run._id);
-  await fs.mkdir(repoPath(traceDir), { recursive: true });
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
   const header = [
     `runId: ${run._id}`,
     `threadId: ${run.threadId}`,
@@ -190,23 +209,24 @@ async function appendTraceEvent(
   await fs.appendFile(traceFile, formatTraceBlock(kind, data), "utf8");
 }
 
+function getAllowedActions(specialist: SpecialistConfig): RuntimeToolAction[] {
+  return specialist.tools.flatMap((toolId) => {
+    const provider = providers[toolId as keyof typeof providers];
+    if (!provider) {
+      throw new Error(`Unknown provider in specialist config: ${toolId}`);
+    }
+
+    return Object.values(provider.actions) as RuntimeToolAction[];
+  });
+}
+
 async function executeToolCall(
-  name: string,
+  action: RuntimeToolAction | undefined,
   args: unknown,
-  env: GmailEnv,
+  env: RuntimeEnv,
 ): Promise<unknown> {
-  if (name === "gmail_search") {
-    const result = await gmail.actions.search.execute(searchInput.parse(args), env);
-    return result.ok ? result.data : { error: result.error };
-  }
-
-  if (name === "gmail_read") {
-    const result = await gmail.actions.read.execute(readInput.parse(args), env);
-    return result.ok ? result.data : { error: result.error };
-  }
-
-  if (name === "gmail_search_sender") {
-    const result = await gmail.actions.searchSender.execute(searchSenderInput.parse(args), env);
+  if (action) {
+    const result = await action.execute(args, env);
     return result.ok ? result.data : { error: result.error };
   }
 
@@ -214,9 +234,23 @@ async function executeToolCall(
     error: {
       type: "validation",
       field: "tool_name",
-      reason: `Unknown tool: ${name}`,
+      reason: "Unknown tool",
     },
   };
+}
+
+function inspectToolInput(action: RuntimeToolAction | undefined, args: unknown): unknown {
+  if (!action?.inspectInput) {
+    return null;
+  }
+
+  try {
+    return action.inspectInput(args);
+  } catch (error) {
+    return {
+      parseError: error instanceof Error ? error.message : "Unknown parse error",
+    };
+  }
 }
 
 async function runAgentLoop(
@@ -229,12 +263,16 @@ async function runAgentLoop(
   systemInstruction: string,
 ): Promise<string> {
   const client = createModelClient(env);
+  const allowedActions = getAllowedActions(specialist);
+  const actionsByName = new Map(
+    allowedActions.map((action) => [action.name, action] as const),
+  );
   const historyEvents = await convex.query(api.threadEvents.getRecentByThread, {
     threadId: run.threadId,
-    limit: 30,
+    limit: 200,
   });
   const messages: ModelMessage[] = [
-    ...buildHistoryMessages(historyEvents, run._id),
+    ...buildRecentThreadMessages(historyEvents, run._id),
     {
       role: "user",
       parts: [{ type: "text", text: run.message }],
@@ -246,6 +284,12 @@ async function runAgentLoop(
     historyEventCount: historyEvents.length,
     systemInstruction,
   });
+  await appendTraceEvent(traceFile, "thread_messages", {
+    timestamp: new Date().toISOString(),
+    turn: 1,
+    messageCount: messages.length,
+    rendered: formatThreadMessages(messages),
+  });
   for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
     runLogger.info("model_turn_started", {
       turn: turn + 1,
@@ -256,12 +300,23 @@ async function runAgentLoop(
     const request = {
       systemInstruction,
       messages,
-      tools: [...gmailToolDeclarations],
+      tools: allowedActions.map((action) => ({
+        name: action.name,
+        description: action.description,
+        parameters: action.parameters,
+      })),
     };
     await appendTraceEvent(traceFile, "model_request", {
       timestamp: new Date().toISOString(),
       turn: turn + 1,
+      toolNames: request.tools.map((tool) => tool.name),
+      renderedMessages: formatThreadMessages(messages),
       request,
+    });
+    await appendTraceEvent(traceFile, "provider_request", {
+      timestamp: new Date().toISOString(),
+      turn: turn + 1,
+      payload: client.toProviderPayload(request),
     });
 
     const response = await client.generate(request);
@@ -274,6 +329,12 @@ async function runAgentLoop(
     await appendTraceEvent(traceFile, "model_response", {
       timestamp: new Date().toISOString(),
       turn: turn + 1,
+      renderedParts: formatThreadMessages([
+        {
+          role: "model",
+          parts: response.parts,
+        },
+      ]),
       response,
     });
 
@@ -294,13 +355,17 @@ async function runAgentLoop(
 
     const toolResults = await Promise.all(
       response.toolCalls.map(async (toolCall) => {
+        const action = actionsByName.get(toolCall.name);
+        const parsedArgs = inspectToolInput(action, toolCall.args);
         runLogger.info("tool_call_started", {
           toolName: toolCall.name,
           toolArgs: toolCall.args,
+          parsedArgs,
         });
         await appendTraceEvent(traceFile, "tool_call", {
           timestamp: new Date().toISOString(),
           toolCall,
+          parsedArgs,
         });
 
         await convex.mutation(api.threadEvents.append, {
@@ -310,7 +375,7 @@ async function runAgentLoop(
           text: JSON.stringify(toolCall),
         });
 
-        const result = await executeToolCall(toolCall.name, toolCall.args, env);
+        const result = await executeToolCall(action, toolCall.args, env);
         runLogger.info("tool_call_completed", {
           toolName: toolCall.name,
           toolResult: result,
@@ -361,6 +426,7 @@ async function processRun(
     specialistId: run.specialistId,
     userId: run.userId,
   });
+  const traceFile = createTraceFilePath(env.TRACE_DIR);
 
   try {
     runLogger.info("run_started", {
@@ -373,8 +439,8 @@ async function processRun(
     const systemInstruction = [prompt.trim(), context.trim()]
       .filter(Boolean)
       .join("\n\n");
-    const traceFile = await initializeTraceFile(
-      env.TRACE_DIR,
+    await initializeTraceFile(
+      traceFile,
       run,
       env,
       prompt,
@@ -419,16 +485,6 @@ async function processRun(
       errorType: "internal_error",
       errorMessage: message,
     });
-    const existingTraceFiles = await fs
-      .readdir(repoPath(env.TRACE_DIR))
-      .then((entries) =>
-        entries
-          .filter((entry) => entry.endsWith(`_${run._id}.log`))
-          .sort()
-          .map((entry) => repoPath(path.join(env.TRACE_DIR, entry))),
-      )
-      .catch(() => []);
-    const traceFile = existingTraceFiles.at(-1) ?? createTraceFilePath(env.TRACE_DIR, run._id);
     try {
       await fs.access(traceFile);
       await appendTraceEvent(traceFile, "run_failed", {
@@ -438,7 +494,7 @@ async function processRun(
     } catch {
       const prompt = "";
       const context = "";
-      await initializeTraceFile(env.TRACE_DIR, run, env, prompt, context);
+      await initializeTraceFile(traceFile, run, env, prompt, context);
       await appendTraceEvent(traceFile, "run_failed", {
         timestamp: new Date().toISOString(),
         message,

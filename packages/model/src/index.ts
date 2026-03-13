@@ -27,5 +27,6 @@ export type ModelRequest = {
 };
 
 export interface ModelClient {
+  toProviderPayload(request: ModelRequest): unknown;
   generate(request: ModelRequest): Promise<ModelResponse>;
 }

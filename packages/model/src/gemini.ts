@@ -25,6 +25,20 @@ type GeminiGenerateResponse = {
   }>;
 };
 
+function toGeminiPayload(request: ModelRequest): Record<string, unknown> {
+  return {
+    system_instruction: {
+      parts: [{ text: request.systemInstruction }],
+    },
+    contents: request.messages.map(toGeminiContent),
+    tools: [
+      {
+        functionDeclarations: request.tools,
+      },
+    ],
+  };
+}
+
 function toGeminiPart(part: ModelPart): Record<string, unknown> {
   if (part.type === "text") {
     return { text: part.text };
@@ -85,7 +99,11 @@ function parseResponse(response: GeminiGenerateResponse): ModelResponse {
 
 export function createGeminiClient(env: GeminiEnv): ModelClient {
   return {
+    toProviderPayload(request: ModelRequest): Record<string, unknown> {
+      return toGeminiPayload(request);
+    },
     async generate(request: ModelRequest): Promise<ModelResponse> {
+      const payload = toGeminiPayload(request);
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${env.MODEL_NAME}:generateContent`,
         {
@@ -94,17 +112,7 @@ export function createGeminiClient(env: GeminiEnv): ModelClient {
             "content-type": "application/json",
             "x-goog-api-key": env.GEMINI_API_KEY,
           },
-          body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: request.systemInstruction }],
-            },
-            contents: request.messages.map(toGeminiContent),
-            tools: [
-              {
-                functionDeclarations: request.tools,
-              },
-            ],
-          }),
+          body: JSON.stringify(payload),
         },
       );
 

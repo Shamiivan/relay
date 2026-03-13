@@ -90,7 +90,6 @@ export async function startBot(): Promise<void> {
       message: message.content.trim(),
       userId: message.author.id,
       channelId: message.channelId,
-      specialistId: "communication",
     });
     logger.info("run_enqueued", {
       runId,
