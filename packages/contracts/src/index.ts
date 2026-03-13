@@ -54,11 +54,37 @@ export type AdapterResult<T = unknown> =
   /** Failed adapter response with a named error. */
   | { ok: false; error: NamedError };
 
+/**
+ * Runtime-facing shape for one model-callable action.
+ */
+export type ToolAction<TEnv = unknown, TResult = unknown> = {
+  /** Stable model-visible action name. */
+  name: string;
+  /** Short description exposed to the model. */
+  description: string;
+  /** JSON schema exposed to the model provider. */
+  parameters: Record<string, unknown>;
+  /** Safety metadata used by runtime policy checks. */
+  descriptor: ActionDescriptor;
+  /** Optional trace helper for showing parsed or normalized input. */
+  inspectInput?: (input: unknown) => unknown;
+  /** Executes the action against the external system. */
+  execute: (input: unknown, env: TEnv) => Promise<AdapterResult<TResult>>;
+};
+
+/**
+ * Provider surface grouped by external system.
+ */
+export type ToolProvider<TEnv = unknown> = {
+  /** Stable provider identifier such as gmail or gsheets. */
+  id: string;
+  /** Actions exposed by this provider. */
+  actions: Record<string, ToolAction<TEnv>>;
+};
+
 export const specialistConfigSchema = z.object({
   id: z.string().min(1),
-  description: z.string().min(1).optional(),
   promptFile: z.string().min(1),
-  triggers: z.array(z.string()).default([]),
   tools: z.array(z.string()).min(1),
   maxTurns: z.number().int().positive(),
   contextFiles: z.array(z.string()).default([]),
