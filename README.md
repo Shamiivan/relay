@@ -1,13 +1,13 @@
 # Relay
 
-Relay is a narrow workspace agent built one use case at a time. Phase 0 is email read access through Discord with Gmail behind a small adapter.
+Relay is a narrow workspace agent built one use case at a time. The current adapters cover Gmail for email access and Google Sheets for spreadsheet reads and row appends.
 Strong typing is a project rule: parse inputs at the boundary, keep result shapes explicit, and avoid `any` or loose records in core paths.
 Persistence runs through Convex, and machine-owned config lives in JSON.
 Execution happens in a local worker process, while Convex stores runs and events in `/convex`.
 
 ## Current Shape
 
-The current vertical slice is: Discord message in, run persisted in Convex, local worker executes Gmail search through the communication specialist, reply back to Discord.
+The current vertical slice is: Discord message in, run persisted in Convex, local worker executes adapter actions through a specialist, reply back to Discord.
 The backend source of truth lives directly in `convex`, the worker lives in `runtime/src`, prompts and context stay in Markdown, and config stays in JSON.
 
 ## How To Read
@@ -18,7 +18,7 @@ Read the repo by following one request through the system.
 2. Read [apps/bot/src/index.ts](/home/shami/workspaces/relay/apps/bot/src/index.ts) to see how Discord creates a run and waits for the result.
 3. Read [convex/runs.ts](/home/shami/workspaces/relay/convex/runs.ts) to see how runs are persisted and claimed by workers.
 4. Read [runtime/src/worker.ts](/home/shami/workspaces/relay/runtime/src/worker.ts) to see how the local runtime loads config, calls Gmail, and writes results back.
-5. Read [packages/adapters/gmail/src/index.ts](/home/shami/workspaces/relay/packages/adapters/gmail/src/index.ts) and [packages/adapters/gmail/src/google-auth.ts](/home/shami/workspaces/relay/packages/adapters/gmail/src/google-auth.ts) for the actual provider integration.
+5. Read [packages/adapters/gmail/src/index.ts](/home/shami/workspaces/relay/packages/adapters/gmail/src/index.ts), [packages/adapters/gsheets/src/index.ts](/home/shami/workspaces/relay/packages/adapters/gsheets/src/index.ts), and [packages/adapters/google-auth.ts](/home/shami/workspaces/relay/packages/adapters/google-auth.ts) for the actual provider integrations.
 6. Read [convex/schema.ts](/home/shami/workspaces/relay/convex/schema.ts) and [convex/events.ts](/home/shami/workspaces/relay/convex/events.ts) last to understand what is stored durably.
 
 ## Running
@@ -28,7 +28,7 @@ Use `pnpm check` to typecheck the full repo.
 
 ## Connect Gmail
 
-Relay already calls Gmail from the worker. To connect an actual mailbox, you need Google OAuth client credentials plus one refresh token in `.env.local`.
+Relay already calls Google Workspace APIs from the worker. To connect Gmail and Google Sheets, you need Google OAuth client credentials plus one refresh token in `.env.local`.
 
 Add these keys:
 
