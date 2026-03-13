@@ -93,9 +93,9 @@ export const specialistConfigSchema = z.object({
 export type SpecialistConfig = z.infer<typeof specialistConfigSchema>;
 
 /**
- * Google credentials required by Gmail access.
+ * Google OAuth credentials shared by Google Workspace adapters.
  */
-export type GmailEnv = {
+export type GoogleOAuthEnv = {
   /** OAuth client identifier. */
   GOOGLE_CLIENT_ID: string;
   /** OAuth client secret. */
@@ -103,6 +103,16 @@ export type GmailEnv = {
   /** Refresh token for delegated Gmail access. */
   GOOGLE_REFRESH_TOKEN: string;
 };
+
+/**
+ * Google credentials required by Gmail access.
+ */
+export type GmailEnv = GoogleOAuthEnv;
+
+/**
+ * Google credentials required by Google Sheets access.
+ */
+export type GSheetsEnv = GoogleOAuthEnv;
 
 /**
  * Minimal email summary returned by Gmail search.
@@ -154,4 +164,34 @@ export type GmailMessage = {
   body: string;
   /** Gmail labels attached to the message. */
   labels: string[];
+};
+
+/**
+ * Values returned from a Google Sheets range read.
+ */
+export type GSheetsReadValuesResult = {
+  /** Spreadsheet identifier. */
+  spreadsheetId: string;
+  /** Resolved A1 range returned by Google Sheets. */
+  range: string;
+  /** Major dimension for the returned values. */
+  majorDimension: "ROWS" | "COLUMNS";
+  /** 2D array of cell values. */
+  values: string[][];
+};
+
+/**
+ * Result returned after appending a row to Google Sheets.
+ */
+export type GSheetsAppendRowResult = {
+  /** Spreadsheet identifier. */
+  spreadsheetId: string;
+  /** Range that received the update. */
+  updatedRange: string;
+  /** Number of updated rows. */
+  updatedRows: number;
+  /** Number of updated columns. */
+  updatedColumns: number;
+  /** Number of updated cells. */
+  updatedCells: number;
 };

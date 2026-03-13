@@ -1,0 +1,10 @@
+{
+  "id": "knowledge",
+  "promptFile": "prompts/knowledge.system.md",
+  "tools": ["gsheets"],
+  "maxTurns": 8,
+  "contextFiles": [
+    "context/global.md",
+    "context/time-tracker.md"
+  ]
+}
