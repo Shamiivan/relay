@@ -1,0 +1,13 @@
+{
+  "description": "Get Google Drive file metadata when you already know the Drive file id.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "fileId": {
+        "type": "string",
+        "description": "The Google Drive file id."
+      }
+    },
+    "required": ["fileId"]
+  }
+}

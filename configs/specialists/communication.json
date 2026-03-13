@@ -4,6 +4,8 @@
   "tools": [
     "gmail.search",
     "gmail.read",
+    "drive.search",
+    "drive.getFile",
     "gsheets.readValues",
     "gsheets.appendRow"
   ],

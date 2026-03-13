@@ -48,7 +48,11 @@ async function main(): Promise<void> {
     const url = auth.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
-      scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+      scope: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/spreadsheets",
+      ],
     });
 
     console.log("Open this URL and complete Google consent:");
