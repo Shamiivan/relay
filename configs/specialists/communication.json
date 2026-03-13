@@ -1,7 +1,12 @@
 {
   "id": "communication",
   "promptFile": "prompts/communication.system.md",
-  "tools": ["gmail"],
+  "tools": [
+    "gmail.search",
+    "gmail.read",
+    "gsheets.readValues",
+    "gsheets.appendRow"
+  ],
   "maxTurns": 8,
   "contextFiles": [
     "context/global.md"
