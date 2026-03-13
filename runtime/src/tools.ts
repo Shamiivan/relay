@@ -80,6 +80,20 @@ export function getAllowedTools(
   });
 }
 
+export async function loadToolPrompt(toolName: string): Promise<string> {
+  const promptPath = repoPath(path.join("tools", toolName, "prompt.md"));
+  const hasPrompt = await fs
+    .access(promptPath)
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasPrompt) {
+    return "";
+  }
+
+  return (await fs.readFile(promptPath, "utf8")).trim();
+}
+
 export async function executeToolCommand(
   tool: ToolManifest,
   input: unknown,

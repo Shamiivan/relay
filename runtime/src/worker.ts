@@ -14,7 +14,13 @@ import { createModelClient } from "../../packages/model/src/provider";
 import type { ModelMessage } from "../../packages/model/src";
 import { loadRuntimeEnv } from "./env";
 import { buildRecentThreadMessages, formatThreadMessages } from "./thread";
-import { executeToolCommand, getAllowedTools, loadAllToolManifests, type ToolManifest } from "./tools";
+import {
+  executeToolCommand,
+  getAllowedTools,
+  loadAllToolManifests,
+  loadToolPrompt,
+  type ToolManifest,
+} from "./tools";
 
 function repoPath(relativePath: string): string {
   return path.resolve(process.cwd(), relativePath);
@@ -42,6 +48,21 @@ async function loadContext(contextFiles: string[]): Promise<string> {
   );
 
   return chunks.join("\n\n").trim();
+}
+
+async function loadToolPromptSection(tools: ToolManifest[]): Promise<string> {
+  const chunks = await Promise.all(
+    tools.map(async (tool) => {
+      const prompt = await loadToolPrompt(tool.name);
+      if (!prompt) {
+        return "";
+      }
+
+      return `# Tool: ${tool.name}\n${prompt}`;
+    }),
+  );
+
+  return chunks.filter(Boolean).join("\n\n").trim();
 }
 
 type RuntimeEnv = ReturnType<typeof loadRuntimeEnv>;
@@ -227,14 +248,13 @@ async function runAgentLoop(
   convex: ConvexClient,
   run: Doc<"runs">,
   specialist: SpecialistConfig,
+  allowedTools: ToolManifest[],
   env: RuntimeEnv,
   runLogger: ReturnType<typeof createLogger>,
   traceFile: string,
   systemInstruction: string,
 ): Promise<string> {
   const client = createModelClient(env);
-  const allTools = await loadAllToolManifests();
-  const allowedTools = getAllowedTools(specialist.tools, allTools);
   const toolsByName = new Map(
     allowedTools.map((tool) => [tool.name, tool] as const),
   );
@@ -404,7 +424,10 @@ async function processRun(
     const specialist = await loadSpecialistConfig(run.specialistId);
     const prompt = await loadPrompt(specialist.promptFile);
     const context = await loadContext(specialist.contextFiles);
-    const systemInstruction = [prompt.trim(), context.trim()]
+    const allTools = await loadAllToolManifests();
+    const allowedTools = getAllowedTools(specialist.tools, allTools);
+    const toolPromptSection = await loadToolPromptSection(allowedTools);
+    const systemInstruction = [prompt.trim(), context.trim(), toolPromptSection]
       .filter(Boolean)
       .join("\n\n");
     await initializeTraceFile(
@@ -418,6 +441,7 @@ async function processRun(
       convex,
       run,
       specialist,
+      allowedTools,
       env,
       runLogger,
       traceFile,
