@@ -56,7 +56,7 @@ export const create = mutation({
       deliveryState: "queued",
     });
 
-    await ctx.db.insert("threadEvents", {
+    await ctx.db.insert("threadMessages", {
       threadId,
       runId,
       kind: "user_message",

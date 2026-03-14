@@ -44,19 +44,28 @@ export default defineSchema({
     .index("by_delivery_state", ["deliveryState"])
     .index("by_thread", ["threadId"]),
 
-  threadEvents: defineTable({
+  threadMessages: defineTable({
     threadId: v.id("threads"),
     runId: v.id("runs"),
-    kind: v.union(
-      v.literal("user_message"),
-      v.literal("tool_call"),
-      v.literal("tool_result"),
-      v.literal("agent_output"),
-      v.literal("run_error"),
-    ),
+    kind: v.union(v.literal("user_message"), v.literal("assistant_message")),
     text: v.string(),
     createdAt: v.number(),
   })
     .index("by_thread_created_at", ["threadId", "createdAt"])
     .index("by_run_created_at", ["runId", "createdAt"]),
+
+  runSteps: defineTable({
+    runId: v.id("runs"),
+    threadId: v.id("threads"),
+    index: v.number(),
+    kind: v.union(v.literal("model"), v.literal("tool")),
+    status: v.union(v.literal("started"), v.literal("completed"), v.literal("failed")),
+    inputJson: v.string(),
+    outputJson: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_run_index", ["runId", "index"])
+    .index("by_thread_created_at", ["threadId", "createdAt"]),
 });

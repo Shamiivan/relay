@@ -9,17 +9,11 @@ export const append = mutation({
   args: {
     threadId: v.id("threads"),
     runId: v.id("runs"),
-    kind: v.union(
-      v.literal("user_message"),
-      v.literal("tool_call"),
-      v.literal("tool_result"),
-      v.literal("agent_output"),
-      v.literal("run_error"),
-    ),
+    kind: v.union(v.literal("user_message"), v.literal("assistant_message")),
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("threadEvents", {
+    await ctx.db.insert("threadMessages", {
       ...args,
       createdAt: Date.now(),
     });
@@ -33,7 +27,7 @@ export const getRecentByThread = query({
   },
   handler: async (ctx, args) => {
     const events = await ctx.db
-      .query("threadEvents")
+      .query("threadMessages")
       .withIndex("by_thread_created_at", (q) => q.eq("threadId", args.threadId))
       .order("desc")
       .take(args.limit ?? 20);
