@@ -33,3 +33,32 @@ Handles email, calendar, docs, campaigns — via Discord.
 
 
 ---
+
+## Future Direction
+
+Keep Relay implementation-simple for now:
+
+- `threads`
+- `threadMessages`
+- `runs`
+- `runSteps`
+- `specialists`
+
+But the longer-term company model is likely workflow-first rather than agent-first.
+
+- a company is better modeled as a set of workflows than a set of agents
+- near-term keep Relay simple and avoid building a workflow engine early
+- later consider making `workflow` the top-level business primitive
+
+Likely future stack:
+
+- `workflow` = business process
+- `workflowRun` = one execution for a client/account
+- `workflowStep` = business-level stage
+- `specialist` = execution profile assigned to a step
+- `runStep` = technical runtime execution record
+
+Important distinction:
+
+- `workflowStep` is business logic
+- `runStep` is runtime logic
