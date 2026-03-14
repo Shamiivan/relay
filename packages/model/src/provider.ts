@@ -1,4 +1,4 @@
-import type { ModelClient } from "./index";
+import type { ModelAdapter } from "./index";
 import { createGeminiClient } from "./gemini";
 
 export type ModelProviderEnv = {
@@ -7,7 +7,7 @@ export type ModelProviderEnv = {
   GEMINI_API_KEY: string;
 };
 
-export function createModelClient(env: ModelProviderEnv): ModelClient {
+export function createModelAdapter(env: ModelProviderEnv): ModelAdapter {
   if (env.MODEL_PROVIDER === "gemini") {
     return createGeminiClient({
       MODEL_NAME: env.MODEL_NAME,
@@ -17,3 +17,5 @@ export function createModelClient(env: ModelProviderEnv): ModelClient {
 
   throw new Error(`Unsupported model provider: ${env.MODEL_PROVIDER}`);
 }
+
+export const createModelClient = createModelAdapter;

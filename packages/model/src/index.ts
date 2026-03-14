@@ -26,7 +26,10 @@ export type ModelRequest = {
   tools: ModelTool[];
 };
 
-export interface ModelClient {
+export interface ModelAdapter {
+  validate(messages: ModelMessage[]): void;
   toProviderPayload(request: ModelRequest): unknown;
   generate(request: ModelRequest): Promise<ModelResponse>;
 }
+
+export type ModelClient = ModelAdapter;

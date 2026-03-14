@@ -10,10 +10,10 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { SpecialistConfig } from "../../packages/contracts/src";
 import { specialistConfigSchema } from "../../packages/contracts/src";
 import { createLogger } from "../../packages/logger/src";
-import { createModelClient } from "../../packages/model/src/provider";
-import type { ModelMessage } from "../../packages/model/src";
+import { createModelAdapter } from "../../packages/model/src/provider";
 import { loadRuntimeEnv } from "./env";
-import { buildRecentThreadMessages, formatThreadMessages } from "./thread";
+import { compileStep } from "./compile-step";
+import { formatThreadMessages } from "./thread";
 import {
   executeToolCommand,
   getAllowedTools,
@@ -261,33 +261,23 @@ async function runAgentLoop(
   traceFile: string,
   baseSystemInstruction: string,
 ): Promise<string> {
-  const client = createModelClient(env);
+  const adapter = createModelAdapter(env);
   const toolsByName = new Map(
     allowedTools.map((tool) => [tool.name, tool] as const),
   );
   const activatedToolNames = new Set<string>();
-  const historyEvents = await convex.query(api.threadEvents.getRecentByThread, {
+  const threadMessages = await convex.query(api.threadMessages.getRecentByThread, {
     threadId: run.threadId,
     limit: 200,
   });
-  const messages: ModelMessage[] = [
-    ...buildRecentThreadMessages(historyEvents, run._id),
-    {
-      role: "user",
-      parts: [{ type: "text", text: run.message }],
-    },
-  ];
+  let runSteps = await convex.query(api.runSteps.listByRun, {
+    runId: run._id,
+  });
   await appendTraceEvent(traceFile, "run_started", {
     timestamp: new Date().toISOString(),
     turnCount: run.turnCount,
-    historyEventCount: historyEvents.length,
+    historyEventCount: threadMessages.length,
     systemInstruction: baseSystemInstruction,
-  });
-  await appendTraceEvent(traceFile, "thread_messages", {
-    timestamp: new Date().toISOString(),
-    turn: 1,
-    messageCount: messages.length,
-    rendered: formatThreadMessages(messages),
   });
   for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
     const activatedTools = allowedTools.filter((tool) =>
@@ -305,29 +295,64 @@ async function runAgentLoop(
       modelName: env.MODEL_NAME,
     });
 
-    const request = {
+    const compiled = compileStep({
+      threadMessages,
+      currentRunId: run._id,
+      runSteps,
       systemInstruction,
-      messages,
       tools: allowedTools.map((tool) => ({
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters,
       })),
-    };
+    });
+    adapter.validate(compiled.messages);
+    await appendTraceEvent(traceFile, "thread_messages", {
+      timestamp: new Date().toISOString(),
+      turn: turn + 1,
+      messageCount: compiled.messages.length,
+      rendered: formatThreadMessages(compiled.messages),
+    });
+
+    const modelStepId = await convex.mutation(api.runSteps.create, {
+      runId: run._id,
+      threadId: run.threadId,
+      index: turn * 2,
+      kind: "model",
+      inputJson: JSON.stringify(compiled),
+    });
+
     await appendTraceEvent(traceFile, "model_request", {
       timestamp: new Date().toISOString(),
       turn: turn + 1,
-      toolNames: request.tools.map((tool) => tool.name),
-      renderedMessages: formatThreadMessages(messages),
-      request,
+      toolNames: compiled.tools.map((tool) => tool.name),
+      renderedMessages: formatThreadMessages(compiled.messages),
+      request: compiled,
     });
     await appendTraceEvent(traceFile, "provider_request", {
       timestamp: new Date().toISOString(),
       turn: turn + 1,
-      payload: client.toProviderPayload(request),
+      payload: adapter.toProviderPayload(compiled),
     });
 
-    const response = await client.generate(request);
+    let response;
+    try {
+      response = await adapter.generate(compiled);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Model request failed";
+      await convex.mutation(api.runSteps.fail, {
+        stepId: modelStepId,
+        errorMessage: message,
+      });
+      throw error;
+    }
+
+    await convex.mutation(api.runSteps.complete, {
+      stepId: modelStepId,
+      outputJson: JSON.stringify({
+        response,
+      }),
+    });
 
     runLogger.info("model_turn_completed", {
       turn: turn + 1,
@@ -345,13 +370,9 @@ async function runAgentLoop(
       ]),
       response,
     });
-
-    if (response.parts.length > 0) {
-      messages.push({
-        role: "model",
-        parts: response.parts,
-      });
-    }
+    runSteps = await convex.query(api.runSteps.listByRun, {
+      runId: run._id,
+    });
 
     if (response.toolCalls.length === 0) {
       if (response.text) {
@@ -360,6 +381,16 @@ async function runAgentLoop(
 
       break;
     }
+
+    const toolStepId = await convex.mutation(api.runSteps.create, {
+      runId: run._id,
+      threadId: run.threadId,
+      index: turn * 2 + 1,
+      kind: "tool",
+      inputJson: JSON.stringify({
+        toolCalls: response.toolCalls,
+      }),
+    });
 
     const toolResults = await Promise.all(
       response.toolCalls.map(async (toolCall) => {
@@ -376,13 +407,6 @@ async function runAgentLoop(
           toolCall,
         });
 
-        await convex.mutation(api.threadEvents.append, {
-          threadId: run.threadId,
-          runId: run._id,
-          kind: "tool_call",
-          text: JSON.stringify(toolCall),
-        });
-
         const result = await executeToolCall(tool, toolCall.args);
         runLogger.info("tool_call_completed", {
           toolName: toolCall.name,
@@ -393,15 +417,6 @@ async function runAgentLoop(
           name: toolCall.name,
           result,
         });
-        await convex.mutation(api.threadEvents.append, {
-          threadId: run.threadId,
-          runId: run._id,
-          kind: "tool_result",
-          text: JSON.stringify({
-            name: toolCall.name,
-            result,
-          }),
-        });
 
         return {
           name: toolCall.name,
@@ -409,14 +424,14 @@ async function runAgentLoop(
         };
       }),
     );
-
-    messages.push({
-      role: "user",
-      parts: toolResults.map((toolResult) => ({
-        type: "tool_result" as const,
-        name: toolResult.name,
-        result: toolResult.result,
-      })),
+    await convex.mutation(api.runSteps.complete, {
+      stepId: toolStepId,
+      outputJson: JSON.stringify({
+        toolResults,
+      }),
+    });
+    runSteps = await convex.query(api.runSteps.listByRun, {
+      runId: run._id,
     });
   }
 
@@ -464,10 +479,10 @@ async function processRun(
       traceFile,
       systemInstruction,
     );
-    await convex.mutation(api.threadEvents.append, {
+    await convex.mutation(api.threadMessages.append, {
       threadId: run.threadId,
       runId: run._id,
-      kind: "agent_output",
+      kind: "assistant_message",
       text: outputText,
     });
     await convex.mutation(api.runs.finish, {
@@ -483,12 +498,6 @@ async function processRun(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker failure";
-    await convex.mutation(api.threadEvents.append, {
-      threadId: run.threadId,
-      runId: run._id,
-      kind: "run_error",
-      text: message,
-    });
     await convex.mutation(api.runs.fail, {
       runId: run._id,
       errorType: "internal_error",

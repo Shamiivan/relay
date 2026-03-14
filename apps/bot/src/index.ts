@@ -68,7 +68,7 @@ export async function startBot(): Promise<void> {
         runLogger.info("run_delivery_started", {
           status: run.status,
         });
-        await channel.send(`<@${run.userId}> ${text}`);
+        await channel.send(`${text}`);
         await convex.mutation(api.runs.markDelivered, { runId: run._id });
         runLogger.info("run_delivery_completed");
       } catch (error) {
@@ -97,6 +97,7 @@ export async function startBot(): Promise<void> {
       channelId: message.channelId,
       userId: message.author.id,
     });
+    // TODO: send a message to the thread explain what is going to be done.
     await message.reply("Queued.");
   });
 

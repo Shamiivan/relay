@@ -1,5 +1,5 @@
 import type {
-  ModelClient,
+  ModelAdapter,
   ModelMessage,
   ModelPart,
   ModelRequest,
@@ -97,8 +97,17 @@ function parseResponse(response: GeminiGenerateResponse): ModelResponse {
   };
 }
 
-export function createGeminiClient(env: GeminiEnv): ModelClient {
+export function createGeminiClient(env: GeminiEnv): ModelAdapter {
   return {
+    validate(messages: ModelMessage[]): void {
+      if (messages.length === 0) {
+        throw new Error("Cannot call Gemini without at least one message.");
+      }
+
+      if (messages[messages.length - 1]?.role === "model") {
+        throw new Error("Cannot continue Gemini request from a trailing model message.");
+      }
+    },
     toProviderPayload(request: ModelRequest): Record<string, unknown> {
       return toGeminiPayload(request);
     },

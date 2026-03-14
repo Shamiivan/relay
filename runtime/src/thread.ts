@@ -1,15 +1,7 @@
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { ModelMessage } from "../../packages/model/src";
 
-export type ThreadEventDoc = Doc<"threadEvents">;
-
-function parseJsonSafely(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
+export type ThreadMessageDoc = Doc<"threadMessages">;
 
 function isUserTextMessage(message: ModelMessage): boolean {
   return (
@@ -40,96 +32,27 @@ function trimToRecentUserTurns(messages: ModelMessage[], maxUserTurns: number): 
  * Consecutive tool calls and tool results are grouped so replay stays valid.
  */
 export function buildThreadMessages(
-  events: ThreadEventDoc[],
-  currentRunId: Id<"runs">,
+  events: ThreadMessageDoc[],
+  _currentRunId: Id<"runs">,
 ): ModelMessage[] {
   const messages: ModelMessage[] = [];
-  let pendingModelParts: ModelMessage["parts"] = [];
-  let pendingUserParts: ModelMessage["parts"] = [];
-
-  function flushModelParts(): void {
-    if (pendingModelParts.length === 0) {
-      return;
-    }
-
-    messages.push({
-      role: "model",
-      parts: pendingModelParts,
-    });
-    pendingModelParts = [];
-  }
-
-  function flushUserParts(): void {
-    if (pendingUserParts.length === 0) {
-      return;
-    }
-
-    messages.push({
-      role: "user",
-      parts: pendingUserParts,
-    });
-    pendingUserParts = [];
-  }
 
   for (const event of events) {
-    if (event.runId === currentRunId && event.kind === "user_message") {
-      continue;
-    }
-
     if (event.kind === "user_message") {
-      flushModelParts();
-      flushUserParts();
-      pendingUserParts.push({ type: "text", text: event.text });
-      flushUserParts();
-      continue;
-    }
-
-    if (event.kind === "agent_output") {
-      flushUserParts();
-      pendingModelParts.push({ type: "text", text: event.text });
-      flushModelParts();
-      continue;
-    }
-
-    if (event.kind === "tool_call") {
-      const data = parseJsonSafely(event.text) as { name?: string; args?: unknown };
-      if (!data || typeof data !== "object" || typeof data.name !== "string") {
-        continue;
-      }
-
-      flushUserParts();
-      pendingModelParts.push({
-        type: "tool_call",
-        name: data.name,
-        args: data.args ?? {},
+      messages.push({
+        role: "user",
+        parts: [{ type: "text", text: event.text }],
       });
       continue;
     }
 
-    if (event.kind === "tool_result") {
-      const data = parseJsonSafely(event.text) as { name?: string; result?: unknown };
-      if (!data || typeof data !== "object" || typeof data.name !== "string") {
-        continue;
-      }
-
-      flushModelParts();
-      pendingUserParts.push({
-        type: "tool_result",
-        name: data.name,
-        result: data.result,
+    if (event.kind === "assistant_message") {
+      messages.push({
+        role: "model",
+        parts: [{ type: "text", text: event.text }],
       });
-      continue;
-    }
-
-    if (event.kind === "run_error") {
-      flushUserParts();
-      pendingModelParts.push({ type: "text", text: `Previous error: ${event.text}` });
-      flushModelParts();
     }
   }
-
-  flushModelParts();
-  flushUserParts();
 
   return messages;
 }
@@ -139,7 +62,7 @@ export function buildThreadMessages(
  * Truncation happens by recent user turns rather than raw event count.
  */
 export function buildRecentThreadMessages(
-  events: ThreadEventDoc[],
+  events: ThreadMessageDoc[],
   currentRunId: Id<"runs">,
   maxUserTurns = 8,
 ): ModelMessage[] {
