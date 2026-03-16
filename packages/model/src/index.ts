@@ -20,6 +20,11 @@ export type ModelResponse = {
   toolCalls: Array<{ name: string; args: unknown }>;
 };
 
+export type ModelGenerateDebug = {
+  providerPayload: unknown;
+  rawProviderResponse: unknown;
+};
+
 export type ModelRequest = {
   systemInstruction: string;
   messages: ModelMessage[];
@@ -30,6 +35,12 @@ export interface ModelAdapter {
   validate(messages: ModelMessage[]): void;
   toProviderPayload(request: ModelRequest): unknown;
   generate(request: ModelRequest): Promise<ModelResponse>;
+  generateWithDebug?: (
+    request: ModelRequest,
+  ) => Promise<{
+    response: ModelResponse;
+    debug: ModelGenerateDebug;
+  }>;
 }
 
 export type ModelClient = ModelAdapter;

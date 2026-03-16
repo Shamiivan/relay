@@ -1,5 +1,6 @@
 import type {
   ModelAdapter,
+  ModelGenerateDebug,
   ModelMessage,
   ModelPart,
   ModelRequest,
@@ -167,6 +168,29 @@ function parseResponse(response: GeminiGenerateResponse): ModelResponse {
   };
 }
 
+async function generateGeminiResponse(
+  env: GeminiEnv,
+  payload: Record<string, unknown>,
+): Promise<GeminiGenerateResponse> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${env.MODEL_NAME}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
+  }
+
+  return (await response.json()) as GeminiGenerateResponse;
+}
+
 export function createGeminiClient(env: GeminiEnv): ModelAdapter {
   return {
     validate(messages: ModelMessage[]): void {
@@ -183,24 +207,23 @@ export function createGeminiClient(env: GeminiEnv): ModelAdapter {
     },
     async generate(request: ModelRequest): Promise<ModelResponse> {
       const payload = toGeminiPayload(request);
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${env.MODEL_NAME}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-goog-api-key": env.GEMINI_API_KEY,
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini request failed: ${response.status} ${await response.text()}`);
-      }
-
-      const data = (await response.json()) as GeminiGenerateResponse;
+      const data = await generateGeminiResponse(env, payload);
       return parseResponse(data);
+    },
+    async generateWithDebug(request: ModelRequest): Promise<{
+      response: ModelResponse;
+      debug: ModelGenerateDebug;
+    }> {
+      const payload = toGeminiPayload(request);
+      const rawProviderResponse = await generateGeminiResponse(env, payload);
+
+      return {
+        response: parseResponse(rawProviderResponse),
+        debug: {
+          providerPayload: payload,
+          rawProviderResponse,
+        },
+      };
     },
   };
 }
