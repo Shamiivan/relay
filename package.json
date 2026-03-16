@@ -2,6 +2,7 @@
   "name": "relay",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "bot": "tsx apps/bot/src/index.ts",
