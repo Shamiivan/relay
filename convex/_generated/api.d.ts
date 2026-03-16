@@ -8,9 +8,12 @@
  * @module
  */
 
+import type * as events from "../events.js";
 import type * as runSteps from "../runSteps.js";
 import type * as runs from "../runs.js";
-import type * as threadMessages from "../threadMessages.js";
+import type * as sessionMessages from "../sessionMessages.js";
+import type * as sessions from "../sessions.js";
+import type * as toolCalls from "../toolCalls.js";
 
 import type {
   ApiFromModules,
@@ -19,9 +22,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  events: typeof events;
   runSteps: typeof runSteps;
   runs: typeof runs;
-  threadMessages: typeof threadMessages;
+  sessionMessages: typeof sessionMessages;
+  sessions: typeof sessions;
+  toolCalls: typeof toolCalls;
 }>;
 
 /**

@@ -5,21 +5,37 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const transportValidator = v.union(
+  v.literal("discord"),
+  v.literal("cli"),
+  v.literal("tui"),
+);
+
 export default defineSchema({
-  threads: defineTable({
+  sessions: defineTable({
     userId: v.string(),
-    channelId: v.string(),
+    threadKey: v.optional(v.string()),
+    channelId: v.optional(v.string()),
+    transport: v.optional(transportValidator),
     specialistId: v.string(),
+    activeWorkflowName: v.optional(v.string()),
+    workflowStateJson: v.optional(v.string()),
+    workflowStepName: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_channel_user_specialist", ["channelId", "userId", "specialistId"]),
+  }).index("by_thread_user_specialist", ["threadKey", "userId", "specialistId"]),
 
   runs: defineTable({
-    threadId: v.id("threads"),
+    sessionId: v.id("sessions"),
     userId: v.string(),
-    channelId: v.string(),
+    threadKey: v.optional(v.string()),
+    channelId: v.optional(v.string()),
+    transport: v.optional(transportValidator),
     message: v.string(),
     specialistId: v.string(),
+    executionMode: v.union(v.literal("open_loop"), v.literal("workflow")),
+    workflowName: v.optional(v.string()),
+    workflowVersion: v.optional(v.number()),
     status: v.union(v.literal("todo"), v.literal("doing"), v.literal("done")),
     turnCount: v.number(),
     outcome: v.optional(
@@ -42,30 +58,79 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_delivery_state", ["deliveryState"])
-    .index("by_thread", ["threadId"]),
+    .index("by_session", ["sessionId"]),
 
-  threadMessages: defineTable({
-    threadId: v.id("threads"),
+  toolCalls: defineTable({
+    runId: v.id("runs"),
+    sessionId: v.id("sessions"),
+    runStepId: v.optional(v.id("runSteps")),
+    index: v.number(),
+    toolName: v.string(),
+    toolKind: v.union(v.literal("machine"), v.literal("human")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("pending"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    argsJson: v.string(),
+    pendingRequestJson: v.optional(v.string()),
+    resultJson: v.optional(v.string()),
+    errorType: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_run_index", ["runId", "index"])
+    .index("by_run_status", ["runId", "status"])
+    .index("by_session_started_at", ["sessionId", "startedAt"]),
+
+  events: defineTable({
+    sessionId: v.id("sessions"),
+    runId: v.optional(v.id("runs")),
+    runStepId: v.optional(v.id("runSteps")),
+    toolCallId: v.optional(v.id("toolCalls")),
+    kind: v.string(),
+    dataJson: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_run_created_at", ["runId", "createdAt"])
+    .index("by_session_created_at", ["sessionId", "createdAt"]),
+
+  sessionMessages: defineTable({
+    sessionId: v.id("sessions"),
     runId: v.id("runs"),
     kind: v.union(v.literal("user_message"), v.literal("assistant_message")),
     text: v.string(),
     createdAt: v.number(),
   })
-    .index("by_thread_created_at", ["threadId", "createdAt"])
+    .index("by_session_created_at", ["sessionId", "createdAt"])
     .index("by_run_created_at", ["runId", "createdAt"]),
 
   runSteps: defineTable({
     runId: v.id("runs"),
-    threadId: v.id("threads"),
+    sessionId: v.id("sessions"),
     index: v.number(),
-    kind: v.union(v.literal("model"), v.literal("tool")),
+    kind: v.union(
+      v.literal("model_response"),
+      v.literal("tool_execution"),
+      v.literal("workflow_step"),
+      v.literal("finalize"),
+    ),
     status: v.union(v.literal("started"), v.literal("completed"), v.literal("failed")),
-    inputJson: v.string(),
-    outputJson: v.optional(v.string()),
+    schemaVersion: v.number(),
+    modelRequestJson: v.optional(v.string()),
+    modelResponseJson: v.optional(v.string()),
+    toolRequestsJson: v.optional(v.string()),
+    toolResultsJson: v.optional(v.string()),
+    summaryText: v.optional(v.string()),
+    errorType: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
   })
     .index("by_run_index", ["runId", "index"])
-    .index("by_thread_created_at", ["threadId", "createdAt"]),
+    .index("by_session_created_at", ["sessionId", "createdAt"]),
 });

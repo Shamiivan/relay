@@ -20,14 +20,22 @@ export const listByRun = query({
 export const create = mutation({
   args: {
     runId: v.id("runs"),
-    threadId: v.id("threads"),
+    sessionId: v.id("sessions"),
     index: v.number(),
-    kind: v.union(v.literal("model"), v.literal("tool")),
-    inputJson: v.string(),
+    kind: v.union(
+      v.literal("model_response"),
+      v.literal("tool_execution"),
+      v.literal("workflow_step"),
+      v.literal("finalize"),
+    ),
+    modelRequestJson: v.optional(v.string()),
+    toolRequestsJson: v.optional(v.string()),
+    summaryText: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("runSteps", {
       ...args,
+      schemaVersion: 1,
       status: "started",
       createdAt: Date.now(),
     });
@@ -37,12 +45,17 @@ export const create = mutation({
 export const complete = mutation({
   args: {
     stepId: v.id("runSteps"),
-    outputJson: v.string(),
+    modelResponseJson: v.optional(v.string()),
+    toolResultsJson: v.optional(v.string()),
+    summaryText: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.stepId, {
       status: "completed",
-      outputJson: args.outputJson,
+      modelResponseJson: args.modelResponseJson,
+      toolResultsJson: args.toolResultsJson,
+      summaryText: args.summaryText,
+      errorType: undefined,
       errorMessage: undefined,
       finishedAt: Date.now(),
     });
@@ -52,11 +65,13 @@ export const complete = mutation({
 export const fail = mutation({
   args: {
     stepId: v.id("runSteps"),
+    errorType: v.string(),
     errorMessage: v.string(),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.stepId, {
       status: "failed",
+      errorType: args.errorType,
       errorMessage: args.errorMessage,
       finishedAt: Date.now(),
     });
