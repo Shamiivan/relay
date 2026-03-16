@@ -31,6 +31,51 @@ Handles email, calendar, docs, campaigns — via Discord.
 
 **use jsdoc for documentation** important for the human to understand teh code
 
+# Dev rules:
+1. Clear Separation of Concerns
+Each component type has ONE responsibility:
+Primitives: Reusable components
+
+2. Velocity Through Constraints
+Architectural boundaries enable faster development by reducing decisions and preventing common mistakes.
+
+3. Simplicity
+the design must be simple, both in implementation and interface. It is more important for the implementation to be simple than the interface. Simplicity is the most important consideration in a design.
+
+4. Correctness
+the design must be correct in all observable aspects. It is slightly better to be simple than correct.
+
+5. Consistency
+the design must not be overly inconsistent. Consistency can be sacrificed for simplicity in some cases, but it is better to drop those parts of the design that deal with less common circumstances than to introduce either implementational complexity or inconsistency.
+
+6. Completeness
+the design must cover as many important situations as is practical. All reasonably expected cases should be covered. Completeness can be sacrificed in favor of any other quality. In fact, completeness must sacrificed whenever implementation simplicity is jeopardized. Consistency can be sacrificed to achieve completeness if simplicity is retained; especially worthless is consistency of interface.
+7. use codegenration if it helps with keeping the code simple and consistent
+for example convex has a good codegenration for types. you only define a method like this:
+
+```
+
+```
+How to build effective agent runtime:
+https://www.anthropic.com/engineering/building-effective-agents
+https://mariozechner.at/posts/2025-11-30-pi-coding-agent/
+
+  - Anthropic says the best systems use “simple, composable patterns” and recommend the simplest solu
+    tion possible first: Building Effective AI Agents
+    (https://www.anthropic.com/research/building-effective-agents)
+  - Anthropic also says good context engineering means the “smallest possible set of high-signal toke
+    ns”: Effective context engineering for AI agents
+    (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+  - OpenAI’s guide recommends maximizing a single agent carefully and warns about tool overload/compl
+    exity management: A practical guide to building AI agents
+    (https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/)
+
+
+
+a couple of agent runtime examples, we can copy the code from them;
+/home/shami/workspaces/openclaw
+/home/shami/workspaces/pi-mono
+/home/shami/workspaces/langchain
 
 ---
 
@@ -62,3 +107,4 @@ Important distinction:
 
 - `workflowStep` is business logic
 - `runStep` is runtime logic
+

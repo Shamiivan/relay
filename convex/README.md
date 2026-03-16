@@ -2,9 +2,11 @@
 
 Convex is Relay's durable state layer. The local worker performs execution, while Convex stores:
 
-- `threads`: conversation identity
-- `threadMessages`: user-visible conversation history only
+- `sessions`: conversation identity and continuity
+- `sessionMessages`: user-visible conversation history only
 - `runs`: one execution lifecycle per user request
-- `runSteps`: model/tool execution records for one run
+- `runSteps`: coarse model/tool execution stages for one run
+- `toolCalls`: one durable record per tool invocation
+- `events`: append-only runtime audit events
 
 This keeps human conversation separate from runtime state.
