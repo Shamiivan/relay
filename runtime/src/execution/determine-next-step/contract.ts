@@ -63,9 +63,9 @@ type ContractEntry = (typeof determineNextStepContract)[number];
 
 type OutputField<TField extends FieldDeclaration> =
   TField["type"] extends "string" ? string
-  : TField["type"] extends "number" ? number
-  : TField["type"] extends "boolean" ? boolean
-  : never;
+    : TField["type"] extends "number" ? number
+      : TField["type"] extends "boolean" ? boolean
+        : never;
 
 export type DetermineNextStepOutput = {
   [TEntry in ContractEntry as TEntry["intent"]]: {
