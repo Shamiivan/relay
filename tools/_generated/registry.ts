@@ -8,6 +8,8 @@ import { gmailReadTool } from "../gworkspace/gmail/gmail.read/tool";
 import { gmailSearchTool } from "../gworkspace/gmail/gmail.search/tool";
 import { gsheetsReadValuesTool } from "../gworkspace/gsheets/gsheets.readValues/tool";
 import { gsheetsAppendRowTool } from "../gworkspace/gsheets/gsheets.appendRow/tool";
+import { bashTool } from "../terminal/bash/tool";
+import { applyPatchTool } from "../terminal/applyPatch/tool";
 
 const manifests = {
   docs_read: {
@@ -322,6 +324,64 @@ const manifests = {
   ],
   "prompt": "Use `gsheets.appendRow` to add one new row at the end of a sheet range.\n\nBefore appending, make sure you already know the column order.\nDo not ask for fields that are already clear from the session.\nAfter a successful append, mention the updated range."
 },
+  terminal_bash: {
+  "name": "terminal.bash",
+  "resource": "terminal",
+  "capability": "read",
+  "description": "Run a bash command in the workspace and return stdout, stderr, and exit code. Supports pipes and shell syntax.",
+  "idempotent": false,
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Full bash command to run. Supports pipes, redirects, and shell built-ins."
+      },
+      "cwd": {
+        "description": "Working directory relative to workspace root. Defaults to workspace root.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ]
+  },
+  "command": [
+    "pnpm",
+    "tsx",
+    "tools/terminal/bash/tool.ts"
+  ],
+  "prompt": "Use `terminal.bash` to run shell commands in the workspace.\n\nCommon uses:\n- Read files: `cat src/utils.ts`\n- List directories: `ls -la`\n- Search code: `grep -r \"pattern\" src/` or `rg \"pattern\"`\n- Run tests: `npx vitest run src/foo.test.ts`\n- Git operations: `git status`, `git diff`\n- Install / build: `pnpm install`, `pnpm build`\n\nAlways read files with `terminal.bash` before patching them.\nCheck exit code and stderr to detect failures."
+},
+  terminal_applyPatch: {
+  "name": "terminal.applyPatch",
+  "resource": "terminal",
+  "capability": "update",
+  "description": "Create, modify, or delete files using the *** Begin Patch / *** End Patch format. Always read files with terminal.bash before patching.",
+  "destructive": true,
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "patch": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Patch content in the *** Begin Patch / *** End Patch format. Paths must be relative. Include 3 lines of context above and below each change."
+      }
+    },
+    "required": [
+      "patch"
+    ]
+  },
+  "command": [
+    "pnpm",
+    "tsx",
+    "tools/terminal/applyPatch/tool.ts"
+  ],
+  "prompt": "Use `terminal.applyPatch` to create, modify, or delete files.\n\n**Always read files with `terminal.bash` before patching.**\n\nPatch format:\n```\n*** Begin Patch\n*** Add File: path/to/new/file.ts\n+line one\n+line two\n*** Update File: path/to/existing.ts\n@@ context hint (a nearby unchanged line)\n context line\n context line\n context line\n-old line to remove\n+new line to add\n context line\n context line\n context line\n*** Delete File: path/to/remove.ts\n*** End Patch\n```\n\nRules:\n- Paths must be **relative** (never absolute)\n- Include **3 lines of context** above and below each change\n- Use `*** Move to: new/path.ts` after `*** Update File:` to rename\n- The `@@ hint` line anchors the position in the file"
+},
 } as const satisfies Record<string, ToolManifest>;
 
 export const toolRegistry = {
@@ -334,6 +394,8 @@ export const toolRegistry = {
   "gmail.search": manifests.gmail_search,
   "gsheets.readValues": manifests.gsheets_readValues,
   "gsheets.appendRow": manifests.gsheets_appendRow,
+  "terminal.bash": manifests.terminal_bash,
+  "terminal.applyPatch": manifests.terminal_applyPatch,
 } as const;
 
 export const declaredTools = {
@@ -346,6 +408,8 @@ export const declaredTools = {
   "gmail.search": gmailSearchTool,
   "gsheets.readValues": gsheetsReadValuesTool,
   "gsheets.appendRow": gsheetsAppendRowTool,
+  "terminal.bash": bashTool,
+  "terminal.applyPatch": applyPatchTool,
 } as const;
 
 export const toolNames = Object.freeze(Object.keys(toolRegistry)) as readonly (keyof typeof toolRegistry)[];

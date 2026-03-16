@@ -233,6 +233,46 @@ export const modelToolsByName = {
   ]
 },
   },
+  "terminal.bash": {
+    name: "terminal.bash",
+    description: "Run a bash command in the workspace and return stdout, stderr, and exit code. Supports pipes and shell syntax.",
+    parameters: {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Full bash command to run. Supports pipes, redirects, and shell built-ins."
+    },
+    "cwd": {
+      "description": "Working directory relative to workspace root. Defaults to workspace root.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command"
+  ]
+},
+  },
+  "terminal.applyPatch": {
+    name: "terminal.applyPatch",
+    description: "Create, modify, or delete files using the *** Begin Patch / *** End Patch format. Always read files with terminal.bash before patching.",
+    parameters: {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "patch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Patch content in the *** Begin Patch / *** End Patch format. Paths must be relative. Include 3 lines of context above and below each change."
+    }
+  },
+  "required": [
+    "patch"
+  ]
+},
+  },
 } as const satisfies Record<GeneratedToolName, ModelTool>;
 
 export function getModelTools(toolNamesToLoad: readonly string[]): ModelTool[] {

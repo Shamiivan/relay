@@ -9,6 +9,8 @@ import { gmailReadTool } from "../gworkspace/gmail/gmail.read/tool";
 import { gmailSearchTool } from "../gworkspace/gmail/gmail.search/tool";
 import { gsheetsReadValuesTool } from "../gworkspace/gsheets/gsheets.readValues/tool";
 import { gsheetsAppendRowTool } from "../gworkspace/gsheets/gsheets.appendRow/tool";
+import { bashTool } from "../terminal/bash/tool";
+import { applyPatchTool } from "../terminal/applyPatch/tool";
 
 export type ToolName = (typeof toolNames)[number];
 export type DocsReadInput = InferToolInput<typeof docsReadTool>;
@@ -29,3 +31,7 @@ export type GsheetsReadValuesInput = InferToolInput<typeof gsheetsReadValuesTool
 export type GsheetsReadValuesOutput = InferToolOutput<typeof gsheetsReadValuesTool>;
 export type GsheetsAppendRowInput = InferToolInput<typeof gsheetsAppendRowTool>;
 export type GsheetsAppendRowOutput = InferToolOutput<typeof gsheetsAppendRowTool>;
+export type BashInput = InferToolInput<typeof bashTool>;
+export type BashOutput = InferToolOutput<typeof bashTool>;
+export type ApplyPatchInput = InferToolInput<typeof applyPatchTool>;
+export type ApplyPatchOutput = InferToolOutput<typeof applyPatchTool>;
