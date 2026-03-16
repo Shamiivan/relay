@@ -19,8 +19,8 @@ export type ThreadData =
 export type ThreadEvent =
   | { type: "user_message"; data: string }
   | { type: "assistant_message"; data: string }
-  | { type: "request_clarification"; data: { prompt: string } }
-  | { type: "request_approval"; data: { prompt: string } }
+  | { type: "request_human_clarification"; data: { prompt: string } }
+  | { type: "request_human_approval"; data: { prompt: string } }
   | { type: "human_response"; data: string }
   | { type: "tool_call"; data: { toolName: string; args: ThreadData } }
   | { type: "tool_result"; data: { toolName: string; result: ThreadData } }
