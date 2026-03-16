@@ -25,6 +25,76 @@ type GeminiGenerateResponse = {
   }>;
 };
 
+const GEMINI_SCHEMA_KEYS = new Set([
+  "type",
+  "format",
+  "description",
+  "nullable",
+  "enum",
+  "items",
+  "properties",
+  "required",
+  "propertyOrdering",
+  "anyOf",
+]);
+
+function sanitizeGeminiSchema(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeGeminiSchema(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const schema = value as Record<string, unknown>;
+  const sanitizedEntries = Object.entries(schema)
+    .filter(([key]) => GEMINI_SCHEMA_KEYS.has(key))
+    .map(([key, childValue]) => {
+      if (key === "properties" && childValue && typeof childValue === "object") {
+        // Property names are user-defined — don't filter them through GEMINI_SCHEMA_KEYS
+        const sanitized = Object.fromEntries(
+          Object.entries(childValue as Record<string, unknown>)
+            .map(([prop, propSchema]) => [prop, sanitizeGeminiSchema(propSchema)])
+            .filter(([, v]) => v !== undefined),
+        );
+        return [key, Object.keys(sanitized).length > 0 ? sanitized : undefined] as const;
+      }
+      return [key, sanitizeGeminiSchema(childValue)] as const;
+    })
+    .filter(([, childValue]) => childValue !== undefined);
+
+  if (sanitizedEntries.length === 0) {
+    return undefined;
+  }
+
+  const result = Object.fromEntries(sanitizedEntries) as Record<string, unknown>;
+
+  // `required` and `propertyOrdering` reference property names — keep them consistent with `properties`
+  const props = result.properties as Record<string, unknown> | undefined;
+  for (const key of ["required", "propertyOrdering"] as const) {
+    if (!Array.isArray(result[key])) continue;
+    if (!props) {
+      delete result[key];
+    } else {
+      result[key] = (result[key] as string[]).filter((k) => k in props);
+      if ((result[key] as string[]).length === 0) delete result[key];
+    }
+  }
+
+  return result;
+}
+
+function toGeminiTool(tool: ModelRequest["tools"][number]): Record<string, unknown> {
+  return {
+    name: tool.name,
+    description: tool.description,
+    parameters: sanitizeGeminiSchema(tool.parameters) ?? { type: "object" },
+  };
+}
+
 function toGeminiPayload(request: ModelRequest): Record<string, unknown> {
   return {
     system_instruction: {
@@ -33,7 +103,7 @@ function toGeminiPayload(request: ModelRequest): Record<string, unknown> {
     contents: request.messages.map(toGeminiContent),
     tools: [
       {
-        functionDeclarations: request.tools,
+        functionDeclarations: request.tools.map(toGeminiTool),
       },
     ],
   };
