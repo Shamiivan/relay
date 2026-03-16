@@ -2,8 +2,8 @@
  * Loads environment variables for the bot.
  * Relay reads the app env plus the local Convex env in this repo.
  */
-import dotenv from "dotenv";
 import { z } from "zod";
+import { loadDotenv } from "../../../packages/env/src/index.ts";
 
 const envSchema = z.object({
   CONVEX_URL: z.string().url(),
@@ -16,7 +16,6 @@ const envSchema = z.object({
  * Root values override Convex values when both are present.
  */
 export function loadEnv() {
-  dotenv.config({ path: "convex/.env.local", quiet: true });
-  dotenv.config({ path: ".env.local", override: true, quiet: true });
+  loadDotenv();
   return envSchema.parse(process.env);
 }
