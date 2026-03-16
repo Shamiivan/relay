@@ -2,8 +2,8 @@
  * Loads environment for local runtime processes.
  * Root values override the local Convex env when both are present.
  */
-import dotenv from "dotenv";
 import { z } from "zod";
+import { loadDotenv } from "../../packages/env/src";
 
 function optionalNonEmptyString() {
   return z.preprocess((value) => {
@@ -34,7 +34,6 @@ const envSchema = z.object({
 }));
 
 export function loadRuntimeEnv() {
-  dotenv.config({ path: "convex/.env.local", quiet: true });
-  dotenv.config({ path: ".env.local", override: true, quiet: true });
+  loadDotenv();
   return envSchema.parse(process.env);
 }

@@ -1,7 +1,6 @@
-import type { Doc, Id } from "../../convex/_generated/dataModel";
-import type { ModelMessage } from "../../packages/model/src";
-
-export type ThreadMessageDoc = Doc<"threadMessages">;
+import type { Id } from "../../../convex/_generated/dataModel";
+import type { ModelMessage } from "../../../packages/model/src";
+import type { SessionMessageDoc } from "../primitives/session";
 
 function isUserTextMessage(message: ModelMessage): boolean {
   return (
@@ -28,11 +27,10 @@ function trimToRecentUserTurns(messages: ModelMessage[], maxUserTurns: number): 
 }
 
 /**
- * Projects raw thread events into model-facing turns.
- * Consecutive tool calls and tool results are grouped so replay stays valid.
+ * Projects durable session messages into model-facing turns.
  */
-export function buildThreadMessages(
-  events: ThreadMessageDoc[],
+export function buildSessionMessages(
+  events: SessionMessageDoc[],
   _currentRunId: Id<"runs">,
 ): ModelMessage[] {
   const messages: ModelMessage[] = [];
@@ -58,15 +56,14 @@ export function buildThreadMessages(
 }
 
 /**
- * Produces a safe replay window for the model.
- * Truncation happens by recent user turns rather than raw event count.
+ * Produces a safe replay window for the model from recent session turns.
  */
-export function buildRecentThreadMessages(
-  events: ThreadMessageDoc[],
+export function buildRecentSessionMessages(
+  events: SessionMessageDoc[],
   currentRunId: Id<"runs">,
   maxUserTurns = 8,
 ): ModelMessage[] {
-  return trimToRecentUserTurns(buildThreadMessages(events, currentRunId), maxUserTurns);
+  return trimToRecentUserTurns(buildSessionMessages(events, currentRunId), maxUserTurns);
 }
 
 function formatPart(part: ModelMessage["parts"][number]): string {
@@ -82,9 +79,9 @@ function formatPart(part: ModelMessage["parts"][number]): string {
 }
 
 /**
- * Renders model messages into a readable thread transcript for trace files.
+ * Renders compiled model messages into a readable transcript for tracing.
  */
-export function formatThreadMessages(messages: ModelMessage[]): string {
+export function formatCompiledMessages(messages: ModelMessage[]): string {
   return messages
     .map((message, index) => {
       const label = message.role === "user" ? "USER" : "MODEL";

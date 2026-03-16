@@ -1,26 +1,20 @@
 /**
- * Local worker that claims pending runs and executes them.
- * This keeps provider SDKs and filesystem access out of Convex.
+ * Local worker that claims pending runs and dispatches them into the runtime loop.
+ * Provider SDKs and filesystem access stay out of Convex.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
-import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { Doc } from "../../convex/_generated/dataModel";
 import type { SpecialistConfig } from "../../packages/contracts/src";
 import { specialistConfigSchema } from "../../packages/contracts/src";
 import { createLogger } from "../../packages/logger/src";
-import { createModelAdapter } from "../../packages/model/src/provider";
 import { loadRuntimeEnv } from "./env";
-import { compileStep } from "./compile-step";
-import { formatThreadMessages } from "./thread";
-import {
-  executeToolCommand,
-  getAllowedTools,
-  loadAllToolManifests,
-  loadToolPrompt,
-  type ToolManifest,
-} from "./tools";
+import { finalizeFailedRun } from "./execution/finalize-run";
+import { runLoop } from "./execution/run-loop";
+import { createTraceFilePath, initializeTraceFile, appendTraceEvent } from "./tracing/trace-file";
+import { getAllowedTools } from "./tools/tool-registry";
 
 function repoPath(relativePath: string): string {
   return path.resolve(process.cwd(), relativePath);
@@ -50,398 +44,10 @@ async function loadContext(contextFiles: string[]): Promise<string> {
   return chunks.join("\n\n").trim();
 }
 
-async function loadToolPromptSection(tools: ToolManifest[]): Promise<string> {
-  const chunks = await Promise.all(
-    tools.map(async (tool) => {
-      const prompt = await loadToolPrompt(tool.name);
-      if (!prompt) {
-        return "";
-      }
-
-      return `# Tool: ${tool.name}\n${prompt}`;
-    }),
-  );
-
-  return chunks.filter(Boolean).join("\n\n").trim();
-}
-
-function buildSystemInstruction(parts: string[]): string {
-  return parts
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-type RuntimeEnv = ReturnType<typeof loadRuntimeEnv>;
-
-type RunTraceKind =
-  | "run_started"
-  | "thread_messages"
-  | "model_request"
-  | "provider_request"
-  | "model_response"
-  | "tool_call"
-  | "tool_result"
-  | "run_finished"
-  | "run_failed";
-
-function createTraceFilePath(traceDir: string): string {
-  const now = new Date();
-  const localTimestamp = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-") + "_" + [
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
-  ].join("-");
-
-  return repoPath(path.join(traceDir, `${localTimestamp}.log`));
-}
-
-function formatValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  return JSON.stringify(value, null, 2);
-}
-
-function formatLoopHeader(kind: RunTraceKind, data: unknown): string {
-  if (!data || typeof data !== "object" || !("turn" in data)) {
-    return kind;
-  }
-
-  const turn = Reflect.get(data, "turn");
-  return typeof turn === "number" ? `loop_${turn}.${kind}` : kind;
-}
-
-function formatTraceDetails(kind: RunTraceKind, data: unknown): string {
-  if (!data || typeof data !== "object") {
-    return formatValue(data);
-  }
-
-  if (kind === "thread_messages") {
-    const rendered = Reflect.get(data, "rendered");
-    return typeof rendered === "string" ? rendered : formatValue(data);
-  }
-
-  if (kind === "model_request") {
-    const toolNames = Reflect.get(data, "toolNames");
-    const renderedMessages = Reflect.get(data, "renderedMessages");
-    const lines = [
-      `tools: ${Array.isArray(toolNames) ? toolNames.join(", ") : ""}`,
-      "",
-      "messages:",
-      typeof renderedMessages === "string" ? renderedMessages : "",
-    ];
-
-    return lines.join("\n").trim();
-  }
-
-  if (kind === "model_response") {
-    const renderedParts = Reflect.get(data, "renderedParts");
-    return typeof renderedParts === "string" ? renderedParts : formatValue(data);
-  }
-
-  if (kind === "provider_request") {
-    const payload = Reflect.get(data, "payload");
-    return formatValue(payload);
-  }
-
-  if (kind === "tool_call") {
-    const toolCall = Reflect.get(data, "toolCall");
-    if (toolCall && typeof toolCall === "object") {
-      const name = Reflect.get(toolCall, "name");
-      const args = Reflect.get(toolCall, "args");
-      return [
-        `name: ${typeof name === "string" ? name : ""}`,
-        "",
-        "args:",
-        formatValue(args),
-      ].join("\n");
-    }
-  }
-
-  if (kind === "tool_result") {
-    const name = Reflect.get(data, "name");
-    const result = Reflect.get(data, "result");
-    return [
-      `name: ${typeof name === "string" ? name : ""}`,
-      "",
-      formatValue(result),
-    ].join("\n");
-  }
-
-  return formatValue(data);
-}
-
-function formatTraceBlock(kind: RunTraceKind, data: unknown): string {
-  return [
-    `=== ${formatLoopHeader(kind, data)} ===`,
-    formatTraceDetails(kind, data),
-    "",
-  ].join("\n");
-}
-
-async function initializeTraceFile(
-  filePath: string,
-  run: Doc<"runs">,
-  env: RuntimeEnv,
-  prompt: string,
-  context: string,
-): Promise<string> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const header = [
-    `runId: ${run._id}`,
-    `threadId: ${run.threadId}`,
-    `userId: ${run.userId}`,
-    `channelId: ${run.channelId}`,
-    `specialistId: ${run.specialistId}`,
-    `modelProvider: ${env.MODEL_PROVIDER}`,
-    `modelName: ${env.MODEL_NAME}`,
-    `startedAt: ${new Date().toISOString()}`,
-    "",
-    "=== user_message ===",
-    run.message,
-    "",
-    "=== prompt ===",
-    prompt,
-    "",
-    "=== context ===",
-    context,
-    "",
-  ].join("\n");
-  await fs.writeFile(filePath, header, "utf8");
-  return filePath;
-}
-
-async function appendTraceEvent(
-  traceFile: string,
-  kind: RunTraceKind,
-  data: unknown,
-): Promise<void> {
-  await fs.appendFile(traceFile, formatTraceBlock(kind, data), "utf8");
-}
-
-async function executeToolCall(
-  tool: ToolManifest | undefined,
-  args: unknown,
-): Promise<unknown> {
-  if (tool) {
-    try {
-      return await executeToolCommand(tool, args);
-    } catch (error) {
-      return {
-        error: {
-          type: "external_error",
-          message: error instanceof Error ? error.message : "Unknown tool execution error",
-        },
-      };
-    }
-  }
-
-  return {
-    error: {
-      type: "validation",
-      field: "tool_name",
-      reason: "Unknown tool",
-    },
-  };
-}
-
-async function runAgentLoop(
-  convex: ConvexClient,
-  run: Doc<"runs">,
-  specialist: SpecialistConfig,
-  allowedTools: ToolManifest[],
-  env: RuntimeEnv,
-  runLogger: ReturnType<typeof createLogger>,
-  traceFile: string,
-  baseSystemInstruction: string,
-): Promise<string> {
-  const adapter = createModelAdapter(env);
-  const toolsByName = new Map(
-    allowedTools.map((tool) => [tool.name, tool] as const),
-  );
-  const activatedToolNames = new Set<string>();
-  const threadMessages = await convex.query(api.threadMessages.getRecentByThread, {
-    threadId: run.threadId,
-    limit: 200,
-  });
-  let runSteps = await convex.query(api.runSteps.listByRun, {
-    runId: run._id,
-  });
-  await appendTraceEvent(traceFile, "run_started", {
-    timestamp: new Date().toISOString(),
-    turnCount: run.turnCount,
-    historyEventCount: threadMessages.length,
-    systemInstruction: baseSystemInstruction,
-  });
-  for (let turn = 0; turn < specialist.maxTurns; turn += 1) {
-    const activatedTools = allowedTools.filter((tool) =>
-      activatedToolNames.has(tool.name),
-    );
-    const toolPromptSection = await loadToolPromptSection(activatedTools);
-    const systemInstruction = buildSystemInstruction([
-      baseSystemInstruction,
-      toolPromptSection,
-    ]);
-
-    runLogger.info("model_turn_started", {
-      turn: turn + 1,
-      modelProvider: env.MODEL_PROVIDER,
-      modelName: env.MODEL_NAME,
-    });
-
-    const compiled = compileStep({
-      threadMessages,
-      currentRunId: run._id,
-      runSteps,
-      systemInstruction,
-      tools: allowedTools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      })),
-    });
-    adapter.validate(compiled.messages);
-    await appendTraceEvent(traceFile, "thread_messages", {
-      timestamp: new Date().toISOString(),
-      turn: turn + 1,
-      messageCount: compiled.messages.length,
-      rendered: formatThreadMessages(compiled.messages),
-    });
-
-    const modelStepId = await convex.mutation(api.runSteps.create, {
-      runId: run._id,
-      threadId: run.threadId,
-      index: turn * 2,
-      kind: "model",
-      inputJson: JSON.stringify(compiled),
-    });
-
-    await appendTraceEvent(traceFile, "model_request", {
-      timestamp: new Date().toISOString(),
-      turn: turn + 1,
-      toolNames: compiled.tools.map((tool) => tool.name),
-      renderedMessages: formatThreadMessages(compiled.messages),
-      request: compiled,
-    });
-    await appendTraceEvent(traceFile, "provider_request", {
-      timestamp: new Date().toISOString(),
-      turn: turn + 1,
-      payload: adapter.toProviderPayload(compiled),
-    });
-
-    let response;
-    try {
-      response = await adapter.generate(compiled);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Model request failed";
-      await convex.mutation(api.runSteps.fail, {
-        stepId: modelStepId,
-        errorMessage: message,
-      });
-      throw error;
-    }
-
-    await convex.mutation(api.runSteps.complete, {
-      stepId: modelStepId,
-      outputJson: JSON.stringify({
-        response,
-      }),
-    });
-
-    runLogger.info("model_turn_completed", {
-      turn: turn + 1,
-      toolCallCount: response.toolCalls.length,
-      hasText: Boolean(response.text),
-    });
-    await appendTraceEvent(traceFile, "model_response", {
-      timestamp: new Date().toISOString(),
-      turn: turn + 1,
-      renderedParts: formatThreadMessages([
-        {
-          role: "model",
-          parts: response.parts,
-        },
-      ]),
-      response,
-    });
-    runSteps = await convex.query(api.runSteps.listByRun, {
-      runId: run._id,
-    });
-
-    if (response.toolCalls.length === 0) {
-      if (response.text) {
-        return response.text;
-      }
-
-      break;
-    }
-
-    const toolStepId = await convex.mutation(api.runSteps.create, {
-      runId: run._id,
-      threadId: run.threadId,
-      index: turn * 2 + 1,
-      kind: "tool",
-      inputJson: JSON.stringify({
-        toolCalls: response.toolCalls,
-      }),
-    });
-
-    const toolResults = await Promise.all(
-      response.toolCalls.map(async (toolCall) => {
-        const tool = toolsByName.get(toolCall.name);
-        if (tool) {
-          activatedToolNames.add(tool.name);
-        }
-        runLogger.info("tool_call_started", {
-          toolName: toolCall.name,
-          toolArgs: toolCall.args,
-        });
-        await appendTraceEvent(traceFile, "tool_call", {
-          timestamp: new Date().toISOString(),
-          toolCall,
-        });
-
-        const result = await executeToolCall(tool, toolCall.args);
-        runLogger.info("tool_call_completed", {
-          toolName: toolCall.name,
-          toolResult: result,
-        });
-        await appendTraceEvent(traceFile, "tool_result", {
-          timestamp: new Date().toISOString(),
-          name: toolCall.name,
-          result,
-        });
-
-        return {
-          name: toolCall.name,
-          result,
-        };
-      }),
-    );
-    await convex.mutation(api.runSteps.complete, {
-      stepId: toolStepId,
-      outputJson: JSON.stringify({
-        toolResults,
-      }),
-    });
-    runSteps = await convex.query(api.runSteps.listByRun, {
-      runId: run._id,
-    });
-  }
-
-  throw new Error("Model loop ended without a final response.");
-}
-
 async function processRun(
   convex: ConvexClient,
   run: Doc<"runs">,
-  env: RuntimeEnv,
+  env: ReturnType<typeof loadRuntimeEnv>,
   processLogger: ReturnType<typeof createLogger>,
 ): Promise<void> {
   const runLogger = processLogger.child({
@@ -449,75 +55,43 @@ async function processRun(
     specialistId: run.specialistId,
     userId: run.userId,
   });
+
+  const specialist = await loadSpecialistConfig(run.specialistId);
+  const prompt = await loadPrompt(specialist.promptFile);
+  const context = await loadContext(specialist.contextFiles);
   const traceFile = createTraceFilePath(env.TRACE_DIR);
+  await initializeTraceFile(traceFile, run, env, prompt, context);
 
   try {
+    const session = await convex.query(api.sessions.get, {
+      sessionId: run.sessionId,
+    });
+    if (!session) {
+      throw new Error(`Missing session for run ${run._id}`);
+    }
+
     runLogger.info("run_started", {
       message: run.message,
       turnCount: run.turnCount,
+      executionMode: run.executionMode,
     });
-    const specialist = await loadSpecialistConfig(run.specialistId);
-    const prompt = await loadPrompt(specialist.promptFile);
-    const context = await loadContext(specialist.contextFiles);
-    const allTools = await loadAllToolManifests();
-    const allowedTools = getAllowedTools(specialist.tools, allTools);
-    const systemInstruction = buildSystemInstruction([prompt, context]);
-    await initializeTraceFile(
-      traceFile,
-      run,
-      env,
-      prompt,
-      context,
-    );
-    const outputText = await runAgentLoop(
+    await runLoop({
       convex,
       run,
+      session,
       specialist,
-      allowedTools,
+      allowedTools: getAllowedTools(specialist.tools),
       env,
       runLogger,
       traceFile,
-      systemInstruction,
-    );
-    await convex.mutation(api.threadMessages.append, {
-      threadId: run.threadId,
-      runId: run._id,
-      kind: "assistant_message",
-      text: outputText,
-    });
-    await convex.mutation(api.runs.finish, {
-      runId: run._id,
-      outputText,
-    });
-    await appendTraceEvent(traceFile, "run_finished", {
-      timestamp: new Date().toISOString(),
-      outputText,
-    });
-    runLogger.info("run_finished", {
-      outputText,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown worker failure";
-    await convex.mutation(api.runs.fail, {
-      runId: run._id,
-      errorType: "internal_error",
-      errorMessage: message,
+    await finalizeFailedRun(convex, run, "internal_error", message);
+    await appendTraceEvent(traceFile, "run_failed", {
+      timestamp: new Date().toISOString(),
+      message,
     });
-    try {
-      await fs.access(traceFile);
-      await appendTraceEvent(traceFile, "run_failed", {
-        timestamp: new Date().toISOString(),
-        message,
-      });
-    } catch {
-      const prompt = "";
-      const context = "";
-      await initializeTraceFile(traceFile, run, env, prompt, context);
-      await appendTraceEvent(traceFile, "run_failed", {
-        timestamp: new Date().toISOString(),
-        message,
-      });
-    }
     runLogger.error("run_failed", {
       error,
     });
@@ -541,7 +115,7 @@ export function startWorker(): void {
       count: pendingRuns.length,
     });
 
-    for (;;) {
+    for (; ;) {
       const run = await convex.mutation(api.runs.claim, {});
       if (!run) {
         break;
