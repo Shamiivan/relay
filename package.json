@@ -11,6 +11,8 @@
     "convex:codegen": "convex codegen",
     "codegen:workflows": "tsx workflows/codegen.ts",
     "gmail:connect": "tsx tools/gmail.connect.ts",
+    "playground:play": "tsx playground/determine-next-step.ts",
+    "test:determine-next-step": "node --import tsx --test runtime/src/execution/determine-next-step.test.ts",
     "tools:codegen": "tsx tools/codegen.ts",
     "worker": "tsx runtime/src/worker.ts",
     "dev": "concurrently -k -n convex,worker,bot -c blue,yellow,green \"pnpm convex:dev\" \"pnpm worker\" \"pnpm bot\"",
