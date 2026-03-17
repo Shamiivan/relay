@@ -1,5 +1,7 @@
 import type { RunDoc } from "./run";
 import type { SessionDoc } from "./session";
+import { buildExplicitDetermineNextStepPrompt } from "../execution/determine-next-step/explicit.ts";
+import type { Workflow } from "../poc/workflow.ts";
 
 /**
  * Thread events represent the in-memory context of an active session, optimized for LLM reasoning.
@@ -23,8 +25,8 @@ export type ThreadEvent =
   | { type: "request_human_clarification"; data: { prompt: string } }
   | { type: "request_human_approval"; data: { prompt: string } }
   | { type: "human_response"; data: string }
-  | { type: "tool_call"; data: { toolName: string; args: ThreadData } }
-  | { type: "tool_result"; data: { toolName: string; result: ThreadData } }
+  | { type: "executable_call"; data: { executableName: string; args: ThreadData } }
+  | { type: "executable_result"; data: { executableName: string; result: ThreadData } }
   | { type: "workflow_state"; data: ThreadData }
   | { type: "system_note"; data: string };
 
@@ -33,25 +35,43 @@ export type ThreadEvent =
  * It is reconstructed from durable state and extended during execution.
  */
 export class Thread<TState = ThreadData> {
-  readonly session: SessionDoc;
-  readonly run: RunDoc;
+  readonly session: SessionDoc | null;
+  readonly run: RunDoc | null;
   readonly state: TState;
   readonly events: ThreadEvent[];
 
   constructor(args: {
-    session: SessionDoc;
-    run: RunDoc;
+    session?: SessionDoc | null;
+    run?: RunDoc | null;
     state: TState;
     events: ThreadEvent[];
   }) {
-    this.session = args.session;
-    this.run = args.run;
+    this.session = args.session ?? null;
+    this.run = args.run ?? null;
     this.state = args.state;
     this.events = args.events;
   }
 
   append(event: ThreadEvent): void {
     this.events.push(event);
+  }
+
+  async buildContext(args: {
+    workflow: Workflow;
+  }): Promise<{
+    prompt: string;
+    contract: readonly import("../execution/determine-next-step/contract.ts").IntentDeclaration[];
+  }> {
+    const sections = await args.workflow.buildContextSections();
+
+    return {
+      prompt: buildExplicitDetermineNextStepPrompt({
+        thread: this as Thread<ThreadData>,
+        contract: args.workflow.contract,
+        sections,
+      }),
+      contract: args.workflow.contract,
+    };
   }
 
   serializeForLLM(): string {

@@ -4,11 +4,11 @@ export type NextStep =
   | { type: "done_for_now"; message: string }
   | { type: "request_human_clarification"; prompt: string }
   | { type: "request_human_approval"; prompt: string }
-  | { type: "tool"; toolName: string; args: ThreadData };
+  | { type: "executable"; executableName: string; args: ThreadData };
 
 export type RunLoopDeps = {
   determineNextStep: (thread: Thread) => Promise<NextStep>;
-  runTool: (toolName: string, args: ThreadData) => Promise<ThreadData>;
+  runExecutable: (executableName: string, args: ThreadData) => Promise<ThreadData>;
 };
 
 /**
@@ -44,21 +44,21 @@ export async function runLoop(
         });
         return thread;
 
-      case "tool": {
+      case "executable": {
         thread.append({
-          type: "tool_call",
+          type: "executable_call",
           data: {
-            toolName: nextStep.toolName,
+            executableName: nextStep.executableName,
             args: nextStep.args,
           },
         });
 
-        const result = await deps.runTool(nextStep.toolName, nextStep.args);
+        const result = await deps.runExecutable(nextStep.executableName, nextStep.args);
 
         thread.append({
-          type: "tool_result",
+          type: "executable_result",
           data: {
-            toolName: nextStep.toolName,
+            executableName: nextStep.executableName,
             result,
           },
         });

@@ -11,8 +11,6 @@ import {
 
 function createThread(message: string) {
   return new Thread({
-    session: {} as never,
-    run: {} as never,
     state: {},
     events: [
       {

@@ -68,8 +68,6 @@ async function main() {
   const adapter = createModelAdapter(loadModelEnv());
   const input = getUserInput();
   const thread = new Thread({
-    session: {} as never,
-    run: {} as never,
     state: {},
     events: [
       {

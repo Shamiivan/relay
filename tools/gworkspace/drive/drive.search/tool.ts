@@ -20,6 +20,7 @@ const driveFileSchema = z.object({
 });
 
 export const driveSearchTool = defineTool({
+  moduleUrl: import.meta.url,
   name: "drive.search",
   resource: "drive",
   capability: "search",

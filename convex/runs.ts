@@ -17,7 +17,6 @@ export const create = mutation({
     message: v.string(),
     userId: v.string(),
     threadKey: v.string(),
-    transport: transportValidator,
   },
   /**
    * Finds or creates a durable session, then enqueues a run against it.
@@ -40,7 +39,6 @@ export const create = mutation({
       (await ctx.db.insert("sessions", {
         userId: args.userId,
         threadKey: args.threadKey,
-        transport: args.transport,
         specialistId,
         createdAt: now,
         updatedAt: now,
@@ -56,7 +54,6 @@ export const create = mutation({
       sessionId,
       userId: args.userId,
       threadKey: args.threadKey,
-      transport: args.transport,
       message: args.message,
       specialistId,
       executionMode: existingSession?.activeWorkflowName ? "workflow" : "open_loop",

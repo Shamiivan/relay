@@ -4,6 +4,7 @@ import { getGoogleAuth } from "../../../lib/google-auth";
 import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../../sdk";
 
 export const docsWriteTool = defineTool({
+  moduleUrl: import.meta.url,
   name: "docs.write",
   resource: "docs",
   capability: "update",

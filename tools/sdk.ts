@@ -58,6 +58,7 @@ export type ToolDeclaration<
   TOutput extends z.ZodType = z.ZodType,
 > = {
   readonly __toolDeclaration: true;
+  moduleUrl?: string;
   name: TName;
   resource: string;
   capability: ToolCapability;

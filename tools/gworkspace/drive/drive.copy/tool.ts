@@ -20,6 +20,7 @@ const driveFileSchema = z.object({
 });
 
 export const driveCopyTool = defineTool({
+  moduleUrl: import.meta.url,
   name: "drive.copy",
   resource: "drive",
   capability: "create",

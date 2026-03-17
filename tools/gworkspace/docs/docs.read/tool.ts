@@ -26,6 +26,7 @@ function extractText(
 }
 
 export const docsReadTool = defineTool({
+  moduleUrl: import.meta.url,
   name: "docs.read",
   resource: "docs",
   capability: "read",
@@ -46,17 +47,22 @@ export const docsReadTool = defineTool({
       version: "v1",
       auth: getGoogleAuth(),
     });
+
     const response = await client.documents.get({
       documentId: input.documentId,
     });
+
     const document = response.data;
 
+    const documentId = document.documentId ?? input.documentId;
+    const title = document.title ?? "";
+    const content = document.body?.content as any;
+    const text = extractText(content);
+
     return {
-      documentId: document.documentId ?? input.documentId,
-      title: document.title ?? "",
-      text: extractText(
-        document.body?.content as Array<{ paragraph?: { elements?: Array<{ textRun?: { content?: string } }> } }>,
-      ),
+      documentId,
+      title,
+      text,
     };
   },
   onError(error) {
