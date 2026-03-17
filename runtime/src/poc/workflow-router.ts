@@ -17,7 +17,7 @@ export async function routeWorkflow(args: {
     DoneForNow,
   ] as const;
   const workflowList = args.workflows.map((workflow) =>
-    `- ${workflow.intent.intent}: ${workflow.intent.description ?? workflow.name}`
+    `${workflow.intent.intent}: ${workflow.intent.description ?? workflow.name}`
   ).join("\n");
   const systemInstruction = "You are a chief of staff to a CEO. You are helping the CEO with their daily tasks. You are very good at understanding what the CEO wants and you are able to delegate tasks to the appropriate teams.";
   args.log?.("");
