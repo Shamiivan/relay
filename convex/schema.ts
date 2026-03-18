@@ -133,4 +133,23 @@ export default defineSchema({
   })
     .index("by_run_index", ["runId", "index"])
     .index("by_session_created_at", ["sessionId", "createdAt"]),
+
+  plan: defineTable({
+    sessionId: v.id("sessions"),
+    runId: v.id("runs"),
+    platform: v.string(),
+    prompt: v.string(),
+    status: v.union(v.literal("todo"), v.literal("doing"), v.literal("done")),
+    outcome: v.optional(
+      v.union(
+        v.literal("success"),
+        v.literal("error"),
+        v.literal("cancelled"),
+      ),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_run_id", ["runId"])
+    .index("by_session_created_at", ["sessionId", "createdAt"]),
 });
