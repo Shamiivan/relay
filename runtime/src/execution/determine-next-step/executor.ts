@@ -35,7 +35,7 @@ function mapIntentToNextStep(parsed: DetermineNextStepOutput): NextStep {
   };
 }
 
-export async function determineNextStepDetailed(
+export async function determineTerminalNextStepDetailed(
   adapter: ModelAdapter,
   thread: Thread,
 ): Promise<DetermineNextStepResult> {
@@ -80,10 +80,10 @@ export async function determineNextStepDetailed(
   };
 }
 
-export async function determineNextStep(
+export async function determineTerminalNextStep(
   adapter: ModelAdapter,
   thread: Thread,
 ): Promise<NextStep> {
-  const result = await determineNextStepDetailed(adapter, thread);
+  const result = await determineTerminalNextStepDetailed(adapter, thread);
   return result.nextStep;
 }

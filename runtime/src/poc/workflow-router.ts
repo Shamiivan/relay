@@ -1,6 +1,6 @@
 import type { ModelAdapter } from "../../../packages/model/src/index.ts";
-import { buildRoutingContext, loadContext } from "../execution/determine-next-step/context.ts";
-import { determineNextStepExplicit } from "../execution/determine-next-step/explicit.ts";
+import { loadRoutingContext } from "../execution/determine-next-step/context.ts";
+import { determineNextStep } from "../execution/determine-next-step/determine.ts";
 import type { Thread } from "../primitives/thread.ts";
 import { getWorkflowByIntent } from "./workflow-registry.ts";
 import type { Workflow } from "./workflow.ts";
@@ -21,17 +21,14 @@ export async function selectWorkflow(
 
   const { adapter, thread, availableWorkflows, log } = args;
 
-  const routingContext = buildRoutingContext(availableWorkflows);
-  loadContext(thread, routingContext);
-  const systemInstruction = "You are a chief of staff to a CEO. You are helping the CEO with their daily tasks. You are very good at understanding what the CEO wants and you are able to delegate tasks to the appropriate teams.";
+  loadRoutingContext(thread, availableWorkflows);
   log?.("");
   log?.("[workflow_router.asking_for_next_step]");
   log?.("[system_instruction]");
-  log?.(systemInstruction);
-  const result = await determineNextStepExplicit({
+  log?.(thread.determineNextStepSystemInstruction);
+  const result = await determineNextStep({
     adapter,
     thread,
-    systemInstruction,
   });
   log?.("");
   log?.("[workflow_router.got_next_step]");

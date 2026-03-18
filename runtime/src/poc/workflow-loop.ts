@@ -1,6 +1,6 @@
 import type { ModelAdapter } from "../../../packages/model/src/index.ts";
-import { buildWorkflowDetermineNextStepContext, loadContext } from "../execution/determine-next-step/context.ts";
-import { buildExplicitDetermineNextStepSchema, determineNextStepExplicit } from "../execution/determine-next-step/explicit.ts";
+import { loadWorkflowContext } from "../execution/determine-next-step/context.ts";
+import { determineNextStep } from "../execution/determine-next-step/determine.ts";
 import type { Thread } from "../primitives/thread.ts";
 import type { Workflow } from "./workflow.ts";
 
@@ -10,57 +10,53 @@ export async function runWorkflowLoop(args: {
   workflow: Workflow;
   log?: (line: string) => void;
 }): Promise<Thread> {
-  const context = await buildWorkflowDetermineNextStepContext(args.workflow);
-  loadContext(args.thread, context);
-  const contextSchema = buildExplicitDetermineNextStepSchema(context.contract);
-  const systemInstruction = "You are a helpful assistant that decides the next step.";
+  const { adapter, thread, workflow, log } = args;
+  await loadWorkflowContext(thread, workflow);
 
   while (true) {
-    args.log?.("");
-    args.log?.("[workflow_planner.asking_for_next_step]");
-    args.log?.("[system_instruction]");
-    args.log?.(systemInstruction);
+    log?.("");
+    log?.("[workflow_planner.asking_for_next_step]");
+    log?.("[system_instruction]");
+    log?.(thread.determineNextStepSystemInstruction);
 
-    const result = await determineNextStepExplicit({
-      adapter: args.adapter,
-      thread: args.thread,
-      systemInstruction,
+    const result = await determineNextStep({
+      adapter,
+      thread,
     });
 
-    args.log?.("");
-    args.log?.("[workflow_planner.got_next_step]");
-    args.log?.("[prompt]");
-    args.log?.(result.prompt);
-    args.log?.("[raw_text]");
-    args.log?.(result.rawText);
-    args.log?.("[parsed]");
-    args.log?.(JSON.stringify(result.parsed, null, 2));
-    contextSchema.parse(result.parsed);
+    log?.("");
+    log?.("[workflow_planner.got_next_step]");
+    log?.("[prompt]");
+    log?.(result.prompt);
+    log?.("[raw_text]");
+    log?.(result.rawText);
+    log?.("[parsed]");
+    log?.(JSON.stringify(result.parsed, null, 2));
 
     switch (result.nextStep.type) {
       case "done_for_now":
-        args.thread.append({
+        thread.append({
           type: "model_response",
           data: result.nextStep.message,
         });
-        return args.thread;
+        return thread;
 
       case "request_human_clarification":
-        args.thread.append({
+        thread.append({
           type: "request_human_clarification",
           data: { prompt: result.nextStep.prompt },
         });
-        return args.thread;
+        return thread;
 
       case "request_human_approval":
-        args.thread.append({
+        thread.append({
           type: "request_human_approval",
           data: { prompt: result.nextStep.prompt },
         });
-        return args.thread;
+        return thread;
 
       case "executable": {
-        args.thread.append({
+        thread.append({
           type: "executable_call",
           data: {
             executableName: result.nextStep.executableName,
@@ -68,12 +64,12 @@ export async function runWorkflowLoop(args: {
           },
         });
 
-        const executableResult = await args.workflow.runExecutable(
+        const executableResult = await workflow.runExecutable(
           result.nextStep.executableName,
           result.nextStep.args,
         );
 
-        args.thread.append({
+        thread.append({
           type: "executable_result",
           data: {
             executableName: result.nextStep.executableName,

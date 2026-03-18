@@ -7,7 +7,7 @@ import type { NextStep } from "../next-step.ts";
 import type { IntentDeclaration } from "./contract.ts";
 import { createIntentSchema, parseJsonResponse, renderOutputFormat } from "./compiler.ts";
 
-export function buildExplicitDetermineNextStepPrompt(args: {
+function buildWorkflowDetermineNextStepPrompt(args: {
   thread: Thread;
   contract: readonly IntentDeclaration[];
   sections?: ContextSection[];
@@ -35,12 +35,12 @@ export function buildExplicitDetermineNextStepPrompt(args: {
     .join("\n\n");
 }
 
-export function buildExplicitDetermineNextStepSchema(
+function buildWorkflowDetermineNextStepSchema(
   contract: readonly IntentDeclaration[],
 ): z.ZodTypeAny {
   const variants = contract.map((declaration) => createIntentSchema(declaration));
   if (variants.length === 0) {
-    throw new Error("Explicit determine-next-step contract must contain at least one intent.");
+    throw new Error("Determine-next-step contract must contain at least one intent.");
   }
 
   if (variants.length === 1) {
@@ -73,7 +73,7 @@ function mapParsedIntentToNextStep(parsed: Record<string, unknown>): NextStep {
   };
 }
 
-export async function determineNextStepExplicit(args: {
+export async function determineNextStep(args: {
   adapter: ModelAdapter;
   thread: Thread;
 }): Promise<{
@@ -84,14 +84,14 @@ export async function determineNextStepExplicit(args: {
 }> {
   const contract = args.thread.determineNextStepContract;
   if (contract.length === 0) {
-    throw new Error("determineNextStepExplicit requires thread determine-next-step contract.");
+    throw new Error("determineNextStep requires thread determine-next-step contract.");
   }
-  const prompt = buildExplicitDetermineNextStepPrompt({
+  const prompt = buildWorkflowDetermineNextStepPrompt({
     thread: args.thread,
     contract,
     sections: args.thread.determineNextStepSections,
   });
-  const schema = buildExplicitDetermineNextStepSchema(contract);
+  const schema = buildWorkflowDetermineNextStepSchema(contract);
   const request = {
     systemInstruction: args.thread.determineNextStepSystemInstruction,
     messages: [

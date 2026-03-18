@@ -41,6 +41,7 @@ export class Thread<TState = ThreadData> {
   readonly events: ThreadEvent[];
   determineNextStepSections: ContextSection[];
   determineNextStepContract: readonly IntentDeclaration[];
+  determineNextStepSystemInstruction: string;
 
   constructor(args: {
     session?: SessionDoc | null;
@@ -49,6 +50,7 @@ export class Thread<TState = ThreadData> {
     events: ThreadEvent[];
     determineNextStepSections?: ContextSection[];
     determineNextStepContract?: readonly IntentDeclaration[];
+    determineNextStepSystemInstruction?: string;
   }) {
     this.session = args.session ?? null;
     this.run = args.run ?? null;
@@ -56,6 +58,8 @@ export class Thread<TState = ThreadData> {
     this.events = args.events;
     this.determineNextStepSections = [...(args.determineNextStepSections ?? [])];
     this.determineNextStepContract = args.determineNextStepContract ?? [];
+    this.determineNextStepSystemInstruction =
+      args.determineNextStepSystemInstruction ?? "You are a helpful assistant that decides the next step.";
   }
 
   append(event: ThreadEvent): void {
