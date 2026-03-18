@@ -63,6 +63,8 @@ async function main() {
       },
     ],
   });
+  // list all the available workflows
+  console.log("Available workflows:", Object.keys(pocWorkflows));
   const availableWorkflows = pocWorkflows;
 
   const selectedWorkflow = await selectWorkflow({
@@ -104,6 +106,7 @@ async function main() {
     log,
   });
 
+  // save to file
   const outputDir = path.join(process.cwd(), ".relay", "mockups", "board-meeting-prep-poc");
   mkdirSync(outputDir, { recursive: true });
   const outputPath = path.join(

@@ -67,7 +67,7 @@ If a line of code looks like this:
 ```ts
 const context = await buildWorkflowDetermineNextStepContext(args.workflow);
 loadContext(args.thread, context);
-const contextSchema = buildExplicitDetermineNextStepSchema(context.contract);
+const contextSchema = buildDetermineNextStepSchema(context.contract);
 const systemInstruction = "You are a helpful assistant that decides the next step.";
 ```
 
