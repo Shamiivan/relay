@@ -18,7 +18,7 @@
     "check": "tsc -p tsconfig.base.json --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "file:../pi-mono/packages/coding-agent",
+    "@mariozechner/pi-coding-agent": "file:./pi-mono/packages/coding-agent",
     "@types/react": "^19.2.14",
     "cac": "^6.7.14",
     "convex": "^1.32.0",

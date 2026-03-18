@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@mariozechner/pi-coding-agent':
-        specifier: file:../pi-mono/packages/coding-agent
-        version: file:../pi-mono/packages/coding-agent(ws@8.19.0)(zod@4.3.6)
+        specifier: file:./pi-mono/packages/coding-agent
+        version: file:pi-mono/packages/coding-agent(ws@8.19.0)(zod@4.3.6)
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.14
@@ -669,8 +669,8 @@ packages:
     engines: {node: '>=20.0.0'}
     hasBin: true
 
-  '@mariozechner/pi-coding-agent@file:../pi-mono/packages/coding-agent':
-    resolution: {directory: ../pi-mono/packages/coding-agent, type: directory}
+  '@mariozechner/pi-coding-agent@file:pi-mono/packages/coding-agent':
+    resolution: {directory: pi-mono/packages/coding-agent, type: directory}
     engines: {node: '>=20.6.0'}
     hasBin: true
 
@@ -2677,7 +2677,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@file:../pi-mono/packages/coding-agent(ws@8.19.0)(zod@4.3.6)':
+  '@mariozechner/pi-coding-agent@file:pi-mono/packages/coding-agent(ws@8.19.0)(zod@4.3.6)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@mariozechner/pi-agent-core': 0.57.1(ws@8.19.0)(zod@4.3.6)
