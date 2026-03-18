@@ -71,18 +71,24 @@ This is the main reason workflows exist.
 
 ---
 
-### Thread Builds Context
+### Planner Context Is Built Explicitly
 
-`Thread` is the active context object.
+`Thread` is the active reasoning state object.
 
 It owns:
 
 - event history
 - current in-memory state
-- serialization for the model
-- context construction from the workflow
+- serialization of thread history
 
-`Thread.buildContext({ workflow })` should build the model-facing context from:
+It should not be used as a bag for planner-only configuration such as:
+
+- determine-next-step contract
+- prompt sections
+- planner schema
+- system instruction
+
+A separate builder should create the model-facing planner context from:
 
 - thread events
 - workflow prompt
@@ -90,7 +96,13 @@ It owns:
 - tool prompt sections
 - workflow contract
 
-Prompt construction should live here, not in the loop.
+Recommended shape:
+
+- `buildDetermineNextStepContext({ thread, workflow })`
+- `buildDetermineNextStepRequest(context)`
+
+This keeps the construction explicit and inspectable while avoiding hidden mutation on `Thread`.
+Prompt construction should live in the planner/context builder layer, not in the loop.
 
 ---
 
@@ -100,7 +112,7 @@ Prompt construction should live here, not in the loop.
 
 It should:
 
-1. ask the thread for context
+1. ask a context builder for planner context
 2. ask the planner for the next step
 3. dispatch the selected executable
 4. append events
@@ -178,7 +190,7 @@ Owns:
 
 - events
 - serialization
-- `buildContext({ workflow })`
+- no planner-only config
 
 ### runLoop
 

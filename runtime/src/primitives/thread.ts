@@ -1,7 +1,7 @@
 import type { RunDoc } from "./run";
 import type { SessionDoc } from "./session";
-import { buildExplicitDetermineNextStepPrompt } from "../execution/determine-next-step/explicit.ts";
-import type { Workflow } from "../poc/workflow.ts";
+import type { ContextSection } from "../context/sections.ts";
+import type { IntentDeclaration } from "../execution/determine-next-step/contract.ts";
 
 /**
  * Thread events represent the in-memory context of an active session, optimized for LLM reasoning.
@@ -39,39 +39,27 @@ export class Thread<TState = ThreadData> {
   readonly run: RunDoc | null;
   readonly state: TState;
   readonly events: ThreadEvent[];
+  determineNextStepSections: ContextSection[];
+  determineNextStepContract: readonly IntentDeclaration[];
 
   constructor(args: {
     session?: SessionDoc | null;
     run?: RunDoc | null;
     state: TState;
     events: ThreadEvent[];
+    determineNextStepSections?: ContextSection[];
+    determineNextStepContract?: readonly IntentDeclaration[];
   }) {
     this.session = args.session ?? null;
     this.run = args.run ?? null;
     this.state = args.state;
     this.events = args.events;
+    this.determineNextStepSections = [...(args.determineNextStepSections ?? [])];
+    this.determineNextStepContract = args.determineNextStepContract ?? [];
   }
 
   append(event: ThreadEvent): void {
     this.events.push(event);
-  }
-
-  async buildContext(args: {
-    workflow: Workflow;
-  }): Promise<{
-    prompt: string;
-    contract: readonly import("../execution/determine-next-step/contract.ts").IntentDeclaration[];
-  }> {
-    const sections = await args.workflow.buildContextSections();
-
-    return {
-      prompt: buildExplicitDetermineNextStepPrompt({
-        thread: this as Thread<ThreadData>,
-        contract: args.workflow.contract,
-        sections,
-      }),
-      contract: args.workflow.contract,
-    };
   }
 
   serializeForLLM(): string {

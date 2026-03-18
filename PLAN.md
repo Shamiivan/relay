@@ -31,6 +31,49 @@ Handles email, calendar, docs, campaigns — via Discord.
 
 **use jsdoc for documentation** important for the human to understand teh code
 
+## Context Building Rule
+
+Build model-facing context explicitly.
+
+Good:
+
+- `const plannerContext = await buildDetermineNextStepContext({ thread, workflow })`
+- `const request = buildDetermineNextStepRequest(plannerContext)`
+- pass `plannerContext` or `request` into the planner as normal values
+
+Avoid:
+
+- mutating `Thread` with planner-only fields like contract, prompt sections, schema, or system instruction
+- hiding prompt assembly across multiple call sites
+- deriving the same schema/prompt in two places
+
+Reason:
+
+- `Thread` should represent active reasoning state, not act as a dependency-injection bag
+- workflow policy should stay explicit at the call site
+- context engineering should expose the exact inputs to the model, because context is a limited resource
+- the smallest high-signal context is easier to debug than implicit state spread across the runtime
+
+Preferred shape:
+
+- `Thread` owns events, state, and serialization of thread history
+- `Workflow` owns available tasks, tools, terminal intents, and workflow prompt files
+- `buildDetermineNextStepContext(...)` combines `Thread` + `Workflow` into a plain data object
+- `buildDetermineNextStepRequest(...)` derives prompt, schema, and system instruction from that object
+- `determineNextStep(...)` receives the fully built request instead of reaching back into mutable thread fields
+
+If a line of code looks like this:
+
+```ts
+const context = await buildWorkflowDetermineNextStepContext(args.workflow);
+loadContext(args.thread, context);
+const contextSchema = buildExplicitDetermineNextStepSchema(context.contract);
+const systemInstruction = "You are a helpful assistant that decides the next step.";
+```
+
+that is a sign the design is only half explicit. The context is built explicitly, but then partially smeared back onto `thread`.
+Prefer one explicit object that contains the planner inputs end-to-end.
+
 # Dev rules:
 1. Clear Separation of Concerns
 Each component type has ONE responsibility:

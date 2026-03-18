@@ -3,9 +3,9 @@ import type { ModelAdapter } from "../../../../packages/model/src/index.ts";
 import type { ContextSection } from "../../context/sections.ts";
 import { composeContext } from "../../context/sections.ts";
 import type { Thread, ThreadData } from "../../primitives/thread.ts";
+import type { NextStep } from "../next-step.ts";
 import type { IntentDeclaration } from "./contract.ts";
 import { createIntentSchema, parseJsonResponse, renderOutputFormat } from "./compiler.ts";
-import type { NextStep } from "../run-loop-v2.ts";
 
 export function buildExplicitDetermineNextStepPrompt(args: {
   thread: Thread;
@@ -75,10 +75,7 @@ function mapParsedIntentToNextStep(parsed: Record<string, unknown>): NextStep {
 
 export async function determineNextStepExplicit(args: {
   adapter: ModelAdapter;
-  contract: readonly IntentDeclaration[];
-  prompt?: string;
-  thread?: Thread;
-  sections?: ContextSection[];
+  thread: Thread;
   systemInstruction?: string;
 }): Promise<{
   prompt: string;
@@ -86,18 +83,16 @@ export async function determineNextStepExplicit(args: {
   parsed: Record<string, unknown>;
   nextStep: NextStep;
 }> {
-  const prompt = args.prompt ?? (() => {
-    if (!args.thread) {
-      throw new Error("determineNextStepExplicit requires either prompt or thread.");
-    }
-
-    return buildExplicitDetermineNextStepPrompt({
-      thread: args.thread,
-      contract: args.contract,
-      sections: args.sections,
-    });
-  })();
-  const schema = buildExplicitDetermineNextStepSchema(args.contract);
+  const contract = args.thread.determineNextStepContract;
+  if (contract.length === 0) {
+    throw new Error("determineNextStepExplicit requires thread determine-next-step contract.");
+  }
+  const prompt = buildExplicitDetermineNextStepPrompt({
+    thread: args.thread,
+    contract,
+    sections: args.thread.determineNextStepSections,
+  });
+  const schema = buildExplicitDetermineNextStepSchema(contract);
   const request = {
     systemInstruction: args.systemInstruction ?? "You are a helpful assistant that decides the next step.",
     messages: [

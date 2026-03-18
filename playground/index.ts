@@ -3,9 +3,9 @@ import path from "node:path";
 import { z } from "zod";
 import { loadDotenv } from "../packages/env/src/index.ts";
 import { createModelAdapter } from "../packages/model/src/provider.ts";
-import { workflowLoop } from "../runtime/src/poc/workflow-loop.ts";
+import { runWorkflowLoop } from "../runtime/src/poc/workflow-loop.ts";
 import { pocWorkflows } from "../runtime/src/poc/workflow-registry.ts";
-import { routeWorkflow } from "../runtime/src/poc/workflow-router.ts";
+import { selectWorkflow } from "../runtime/src/poc/workflow-router.ts";
 import { Thread } from "../runtime/src/primitives/thread.ts";
 
 const envSchema = z.object({
@@ -63,14 +63,18 @@ async function main() {
       },
     ],
   });
-  const selected = await routeWorkflow({
+  const availableWorkflows = pocWorkflows;
+
+  const selectedWorkflow = await selectWorkflow({
     adapter,
     thread,
-    workflows: pocWorkflows,
+    availableWorkflows,
     log,
   });
 
-  if (selected instanceof Thread) {
+
+  // if no workflow selected, save the thread and exit
+  if (selectedWorkflow.type !== "workflow_selected") {
     const outputDir = path.join(process.cwd(), ".relay", "mockups", "board-meeting-prep-poc");
     mkdirSync(outputDir, { recursive: true });
     const outputPath = path.join(
@@ -80,23 +84,23 @@ async function main() {
     const tracePath = outputPath.replace(/\.json$/, ".log");
 
     writeFileSync(outputPath, JSON.stringify({
-      events: selected.events,
-      serializedThread: selected.serializeForLLM(),
+      events: selectedWorkflow.thread.events,
+      serializedThread: selectedWorkflow.thread.serializeForLLM(),
     }, null, 2));
     writeFileSync(tracePath, traceLines.join("\n"));
 
     console.log(JSON.stringify({
-      events: selected.events,
+      events: selectedWorkflow.thread.events,
       savedTo: outputPath,
       traceSavedTo: tracePath,
     }, null, 2));
     console.log("Done.");
     return;
   }
-  const finalThread = await workflowLoop({
+  const result = await runWorkflowLoop({
     adapter,
-    thread,
-    workflow: selected,
+    thread: selectedWorkflow.thread,
+    workflow: selectedWorkflow.workflow,
     log,
   });
 
@@ -109,13 +113,13 @@ async function main() {
   const tracePath = outputPath.replace(/\.json$/, ".log");
 
   writeFileSync(outputPath, JSON.stringify({
-    events: finalThread.events,
-    serializedThread: finalThread.serializeForLLM(),
+    events: result.events,
+    serializedThread: result.serializeForLLM(),
   }, null, 2));
   writeFileSync(tracePath, traceLines.join("\n"));
 
   console.log(JSON.stringify({
-    events: finalThread.events,
+    events: result.events,
     savedTo: outputPath,
     traceSavedTo: tracePath,
   }, null, 2));

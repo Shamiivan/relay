@@ -1,6 +1,6 @@
 import type { ModelAdapter } from "../../../../packages/model/src";
 import type { Thread } from "../../primitives/thread";
-import type { NextStep } from "../run-loop-v2";
+import type { NextStep } from "../next-step";
 import type { DetermineNextStepOutput } from "./contract";
 import {
   buildDetermineNextStepPrompt,
