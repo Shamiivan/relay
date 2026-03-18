@@ -30,7 +30,6 @@ export class CliTransport implements Transport<CliEnv> {
       message: this.prompt,
       userId: this.userId,
       threadKey: this.threadKey,
-      transport: this.id,
     });
 
     await new Promise<void>((resolve) => {
