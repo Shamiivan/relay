@@ -4,23 +4,21 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.0.0",
+  "bin": {
+    "relay": "./cli.ts"
+  },
   "scripts": {
     "bot": "tsx apps/bot/src/index.ts",
     "cli": "tsx apps/cli/src/index.ts",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
-    "codegen:workflows": "tsx workflows/codegen.ts",
     "gmail:connect": "tsx tools/gmail.connect.ts",
-    "playground:debug-basics": "tsx playground/debug-basics.ts",
-    "playground:play": "tsx playground/index.ts",
-    "test:determine-next-step": "node --import tsx --test runtime/src/execution/determine-next-step/test.ts",
     "tools:codegen": "tsx tools/codegen.ts",
-    "worker": "tsx runtime/src/worker.ts",
-    "dev": "concurrently -k -n convex,worker,bot -c blue,yellow,green \"pnpm convex:dev\" \"pnpm worker\" \"pnpm bot\"",
     "inspector": "tsx apps/inspector/src/index.tsx",
     "check": "tsc -p tsconfig.base.json --noEmit"
   },
   "dependencies": {
+    "@mariozechner/pi-coding-agent": "file:../pi-mono/packages/coding-agent",
     "@types/react": "^19.2.14",
     "cac": "^6.7.14",
     "convex": "^1.32.0",
