@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+// Self-contained Google Docs read tool
+// Requires: GOOGLE_TOKEN_PATH env var pointing to a valid OAuth token JSON file
+
+import { createInterface } from "node:readline";
+import { get as httpsGet } from "node:https";
+import { existsSync, readFileSync } from "node:fs";
+
+function googleGet(url, accessToken) {
+  return new Promise((resolve, reject) => {
+    const req = httpsGet(url, { headers: { Authorization: `Bearer ${accessToken}` } }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          reject(new Error(`Invalid JSON: ${data.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", reject);
+  });
+}
+
+function extractText(doc) {
+  const parts = [];
+  for (const section of doc.body?.content ?? []) {
+    for (const elem of section.paragraph?.elements ?? []) {
+      const text = elem.textRun?.content;
+      if (text) parts.push(text);
+    }
+  }
+  return parts.join("");
+}
+
+const rl = createInterface({ input: process.stdin });
+const lines = [];
+rl.on("line", (l) => lines.push(l));
+rl.on("close", async () => {
+  try {
+    const input = JSON.parse(lines.join(""));
+    const { documentId } = input;
+
+    const tokenPath = process.env.GOOGLE_TOKEN_PATH;
+    if (!tokenPath || !existsSync(tokenPath)) {
+      process.stderr.write("[docs.read] GOOGLE_TOKEN_PATH not set or file not found\n");
+      process.stdout.write(
+        JSON.stringify({ documentId, error: { message: "OAuth not configured" } }) + "\n",
+      );
+      return;
+    }
+
+    const token = JSON.parse(readFileSync(tokenPath, "utf8"));
+    const accessToken = token.access_token;
+
+    const doc = await googleGet(
+      `https://docs.googleapis.com/v1/documents/${documentId}`,
+      accessToken,
+    );
+
+    if (doc.error) {
+      process.stdout.write(JSON.stringify({ documentId, error: doc.error }) + "\n");
+      return;
+    }
+
+    process.stdout.write(
+      JSON.stringify({ documentId, title: doc.title, text: extractText(doc) }) + "\n",
+    );
+  } catch (err) {
+    process.stderr.write(String(err) + "\n");
+    process.exit(1);
+  }
+});

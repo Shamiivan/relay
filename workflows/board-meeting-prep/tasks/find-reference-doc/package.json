@@ -1,0 +1,6 @@
+{
+  "name": "@relay/task-find-reference-doc",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run.ts" }
+}
