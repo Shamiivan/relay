@@ -22,11 +22,11 @@ function findClosestEnvFile(startDir: string, filename: string): string | undefi
 export function loadDotenv(startDir: string = process.cwd()): void {
   const envLocalPath = findClosestEnvFile(startDir, ".env.local");
   if (envLocalPath) {
-    loadEnvFile({ path: envLocalPath, override: true });
+    loadEnvFile({ path: envLocalPath, override: true, quiet: true });
   }
 
   const envPath = findClosestEnvFile(startDir, ".env");
   if (envPath) {
-    loadEnvFile({ path: envPath, override: false });
+    loadEnvFile({ path: envPath, override: false, quiet: true });
   }
 }

@@ -69,8 +69,16 @@ function getBraveApiKey(env: NodeJS.ProcessEnv = process.env): string {
   return apiKey;
 }
 
-function buildWebSearchUrl(input: z.output<typeof inputSchema>): string {
-  const url = new URL(BRAVE_WEB_SEARCH_URL);
+/**
+ * Allow tests to point the tool at a local fake server while production keeps
+ * the documented Brave endpoint.
+ */
+function getBraveBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.BRAVE_WEB_SEARCH_BASE_URL?.trim() || BRAVE_WEB_SEARCH_URL;
+}
+
+function buildWebSearchUrl(input: z.output<typeof inputSchema>, baseUrl: string): string {
+  const url = new URL(baseUrl);
   url.searchParams.set("q", input.query);
   url.searchParams.set("count", String(input.count));
   url.searchParams.set("offset", String(input.offset));
@@ -121,14 +129,16 @@ export async function searchWeb(
   moreResultsAvailable: boolean;
 }> {
   const input = inputSchema.parse(rawInput);
-  const apiKey = getBraveApiKey(options?.env);
+  const env = options?.env ?? process.env;
+  const apiKey = getBraveApiKey(env);
+  const baseUrl = getBraveBaseUrl(env);
   const fetchImpl = options?.fetchImpl ?? (globalThis.fetch as WebSearchFetch | undefined);
 
   if (!fetchImpl) {
     throw new Error("Fetch is not available in this runtime");
   }
 
-  const response = await fetchImpl(buildWebSearchUrl(input), {
+  const response = await fetchImpl(buildWebSearchUrl(input, baseUrl), {
     method: "GET",
     headers: {
       Accept: "application/json",

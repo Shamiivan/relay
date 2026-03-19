@@ -29,9 +29,6 @@ pnpm gmail:connect  # OAuth flow for Google Workspace credentials
 Always check `ok` first. Never inspect raw fields to determine success.
 
 **TypeScript tools:** `tools/<provider>/<tool.name>/tool.ts` — use `defineTool()` + `runDeclaredTool()` from `tools/sdk.ts`. The `run` shim under the workflow directory is a one-liner `exec tsx <tool.ts>`.
-
-**Approval gate:** destructive bash commands are matched by `DESTRUCTIVE_PATTERNS` regex in `cli.ts`. The agent must not call destructive tools without a matching pattern — or the gate is silent.
-
 **Thread events:** `system_note`, `executable_call`, `executable_result`, `user_message`, `human_response`, `assistant_message`, `model_response`. Serialized to XML-like format for the LLM each turn.
 
 ## Adding a tool
