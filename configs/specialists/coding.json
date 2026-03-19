@@ -1,7 +1,0 @@
-{
-  "id": "coding",
-  "promptFile": "prompts/coding.system.md",
-  "contextFiles": ["context/global.md"],
-  "tools": ["terminal.bash", "terminal.applyPatch"],
-  "maxTurns": 20
-}
