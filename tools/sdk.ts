@@ -48,9 +48,11 @@ export type ToolHandler<
   input: z.output<TInput>;
 }) => Promise<z.input<TOutput> | z.output<TOutput>> | z.input<TOutput> | z.output<TOutput>;
 
-export type ToolErrorHandler<TOutput extends z.ZodType = z.ZodType> = (
+export type ToolErrorInfo = { type: string; message?: string };
+
+export type ToolErrorHandler = (
   error: unknown,
-) => Promise<z.input<TOutput> | z.output<TOutput>> | z.input<TOutput> | z.output<TOutput>;
+) => Promise<ToolErrorInfo> | ToolErrorInfo;
 
 export type ToolDeclaration<
   TName extends string = string,
@@ -70,7 +72,7 @@ export type ToolDeclaration<
   output: TOutput;
   prompt: ToolPrompt;
   handler: ToolHandler<TInput, TOutput>;
-  onError?: ToolErrorHandler<TOutput>;
+  onError?: ToolErrorHandler;
 };
 
 export type ToolManifest = {
@@ -124,15 +126,15 @@ export async function runDeclaredTool<TTool extends ToolDeclaration>(
 ): Promise<void> {
   try {
     const input = tool.input.parse(await readJsonInput());
-    const result = await tool.handler({ input });
-    writeJsonOutput(tool.output.parse(result));
+    const rawResult = await tool.handler({ input });
+    writeJsonOutput({ ok: true, result: tool.output.parse(rawResult) });
   } catch (error) {
     if (tool.onError) {
-      writeJsonOutput(tool.output.parse(await tool.onError(error)));
+      writeJsonOutput({ ok: false, error: await tool.onError(error) });
       return;
     }
-
-    throw error;
+    const message = error instanceof Error ? error.message : "Unknown error";
+    writeJsonOutput({ ok: false, error: { type: "internal_error", message } });
   }
 }
 

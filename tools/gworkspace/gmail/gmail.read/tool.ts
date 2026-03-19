@@ -1,7 +1,8 @@
 import { google, type gmail_v1 } from "googleapis";
 import { z } from "zod";
 import { getGoogleAuth } from "../../../lib/google-auth";
-import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../../sdk";
+import { defineTool, promptFile, runDeclaredTool } from "../../../sdk";
+import type { ToolErrorInfo } from "../../../sdk";
 
 function getHeader(headers: gmail_v1.Schema$MessagePartHeader[] | undefined, name: string): string {
   return headers?.find((header) => header.name === name)?.value ?? "";
@@ -52,7 +53,6 @@ export const gmailReadTool = defineTool({
     date: z.string().optional(),
     body: z.string().optional(),
     labels: z.array(z.string()).optional(),
-    error: toolErrorSchema.optional(),
   }),
   prompt: promptFile("./prompt.md"),
   async handler({ input }) {
@@ -78,28 +78,14 @@ export const gmailReadTool = defineTool({
       labels: message.data.labelIds ?? [],
     };
   },
-  onError(error) {
+  onError(error): ToolErrorInfo {
     if (error instanceof z.ZodError) {
-      const issue = error.issues[0];
-      return {
-        error: {
-          type: "validation",
-          field: issue?.path.join(".") || "input",
-          reason: issue?.message || "Invalid input",
-        },
-      };
+      return { type: "validation", message: error.issues[0]?.message };
     }
-
     if (error instanceof Error && /auth|credential|token/i.test(error.message)) {
-      return { error: { type: "auth_error" } };
+      return { type: "auth_error" };
     }
-
-    return {
-      error: {
-        type: "external_error",
-        message: error instanceof Error ? error.message : "Unknown Gmail error",
-      },
-    };
+    return { type: "external_error", message: error instanceof Error ? error.message : "Unknown Gmail error" };
   },
 });
 

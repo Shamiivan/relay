@@ -1,7 +1,8 @@
 import { google } from "googleapis";
 import { z } from "zod";
 import { getGoogleAuth } from "../../../lib/google-auth";
-import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../../sdk";
+import { defineTool, promptFile, runDeclaredTool } from "../../../sdk";
+import type { ToolErrorInfo } from "../../../sdk";
 
 const driveOwnerSchema = z.object({
   displayName: z.string(),
@@ -32,7 +33,6 @@ export const driveGetFileTool = defineTool({
     trashed: z.boolean().optional(),
     driveId: z.string().optional(),
     owners: z.array(driveOwnerSchema).optional(),
-    error: toolErrorSchema.optional(),
   }),
   prompt: promptFile("./prompt.md"),
   async handler({ input }) {
@@ -68,34 +68,19 @@ export const driveGetFileTool = defineTool({
       })),
     };
   },
-  onError(error) {
+  onError(error): ToolErrorInfo {
     if (error instanceof z.ZodError) {
-      const issue = error.issues[0];
-      return {
-        error: {
-          type: "validation",
-          field: issue?.path.join(".") || "input",
-          reason: issue?.message || "Invalid input",
-        },
-      };
+      return { type: "validation", message: error.issues[0]?.message };
     }
-
     if (error instanceof Error) {
       if (/auth|credential|token|unauthorized|insufficient/i.test(error.message)) {
-        return { error: { type: "auth_error" } };
+        return { type: "auth_error" };
       }
-
       if (/404|not found/i.test(error.message)) {
-        return { error: { type: "not_found", id: "file" } };
+        return { type: "not_found", message: "File not found" };
       }
     }
-
-    return {
-      error: {
-        type: "external_error",
-        message: error instanceof Error ? error.message : "Unknown Google Drive error",
-      },
-    };
+    return { type: "external_error", message: error instanceof Error ? error.message : "Unknown Google Drive error" };
   },
 });
 

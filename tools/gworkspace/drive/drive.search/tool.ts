@@ -1,7 +1,8 @@
 import { google } from "googleapis";
 import { z } from "zod";
 import { getGoogleAuth } from "../../../lib/google-auth";
-import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../../sdk";
+import { defineTool, promptFile, runDeclaredTool } from "../../../sdk";
+import type { ToolErrorInfo } from "../../../sdk";
 
 const driveOwnerSchema = z.object({
   displayName: z.string(),
@@ -37,7 +38,6 @@ export const driveSearchTool = defineTool({
   output: z.object({
     files: z.array(driveFileSchema).default([]),
     nextPageToken: z.string().optional(),
-    error: toolErrorSchema.optional(),
   }),
   prompt: promptFile("./prompt.md"),
   async handler({ input }) {
@@ -72,34 +72,19 @@ export const driveSearchTool = defineTool({
       nextPageToken: response.data.nextPageToken ?? undefined,
     };
   },
-  onError(error) {
+  onError(error): ToolErrorInfo {
     if (error instanceof z.ZodError) {
-      const issue = error.issues[0];
-      return {
-        error: {
-          type: "validation",
-          field: issue?.path.join(".") || "input",
-          reason: issue?.message || "Invalid input",
-        },
-      };
+      return { type: "validation", message: error.issues[0]?.message };
     }
-
     if (error instanceof Error) {
       if (/auth|credential|token|unauthorized|insufficient/i.test(error.message)) {
-        return { error: { type: "auth_error" } };
+        return { type: "auth_error" };
       }
-
       if (/429|rate/i.test(error.message)) {
-        return { error: { type: "rate_limit", retryAfterMs: 60000 } };
+        return { type: "rate_limit", message: "Rate limited, retry after 60s" };
       }
     }
-
-    return {
-      error: {
-        type: "external_error",
-        message: error instanceof Error ? error.message : "Unknown Google Drive error",
-      },
-    };
+    return { type: "external_error", message: error instanceof Error ? error.message : "Unknown Google Drive error" };
   },
 });
 

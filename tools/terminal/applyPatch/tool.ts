@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../sdk";
+import { defineTool, promptFile, runDeclaredTool } from "../../sdk";
+import type { ToolErrorInfo } from "../../sdk";
 import { applyPatch } from "./apply-patch";
 
 export const applyPatchTool = defineTool({
@@ -22,20 +23,14 @@ export const applyPatchTool = defineTool({
         deleted: z.array(z.string()),
       })
       .optional(),
-    error: toolErrorSchema.optional(),
   }),
   prompt: promptFile("./prompt.md"),
   async handler({ input }) {
     const result = await applyPatch(input.patch, { cwd: process.cwd() });
     return { summary: result.summary };
   },
-  onError(error) {
-    return {
-      error: {
-        type: "patch_error",
-        message: error instanceof Error ? error.message : "Unknown patch error",
-      },
-    };
+  onError(error): ToolErrorInfo {
+    return { type: "patch_error", message: error instanceof Error ? error.message : "Unknown patch error" };
   },
 });
 

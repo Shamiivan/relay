@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { z } from "zod";
-import { defineTool, promptFile, runDeclaredTool, toolErrorSchema } from "../../sdk";
+import { defineTool, promptFile, runDeclaredTool } from "../../sdk";
+import type { ToolErrorInfo } from "../../sdk";
 
 const WORKSPACE_ROOT = path.resolve(process.cwd());
 const STDOUT_LIMIT = 20_000;
@@ -29,7 +30,6 @@ export const bashTool = defineTool({
     exitCode: z.number().int(),
     truncated: z.boolean().optional(),
     timedOut: z.boolean().optional(),
-    error: toolErrorSchema.optional(),
   }),
   prompt: promptFile("./prompt.md"),
   async handler({ input }) {
@@ -86,16 +86,8 @@ export const bashTool = defineTool({
       });
     });
   },
-  onError(error) {
-    return {
-      stdout: "",
-      stderr: error instanceof Error ? error.message : "Unknown error",
-      exitCode: -1,
-      error: {
-        type: "tool_error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-    };
+  onError(error): ToolErrorInfo {
+    return { type: "tool_error", message: error instanceof Error ? error.message : "Unknown error" };
   },
 });
 
