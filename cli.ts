@@ -225,11 +225,15 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     console.error();
   }
 
-  thread.append({ type: "model_response", data: responseText.trim() });
+  const trimmed = responseText.trim();
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  const reasoning = jsonMatch ? trimmed.slice(0, trimmed.indexOf(jsonMatch[0])).trim() : "";
+  if (reasoning) thread.append({ type: "assistant_message", data: reasoning });
+  thread.append({ type: "model_response", data: jsonMatch?.[0] ?? trimmed });
 
   let nextStep: NextStep;
   try {
-    nextStep = parseNextStep(responseText.trim());
+    nextStep = parseNextStep(trimmed);
   } catch {
     thread.append({
       type: "system_note",
