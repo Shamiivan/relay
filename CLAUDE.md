@@ -12,11 +12,10 @@ Check `AGENTS/decisions.md` for past decisions before proposing a new approach â
 
 ```bash
 pnpm check          # typecheck the full repo
+pnpm test           # run the repo test suite
 pnpm tools:codegen  # regenerate tools/_generated/ (run after adding a tool â€” optional, see below)
 pnpm gmail:connect  # OAuth flow for Google Workspace credentials
 ```
-
-No test script exists yet. Tests are Slice 1 of the active plan.
 
 ## Architecture
 
