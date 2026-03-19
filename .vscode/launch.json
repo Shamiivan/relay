@@ -1,83 +1,25 @@
 {
   "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "relayMessage",
+      "type": "promptString",
+      "description": "Initial message for relay CLI",
+      "default": "hello"
+    }
+  ],
   "configurations": [
     {
-      "name": "Debug Playground Basics",
+      "name": "Debug relay cli",
       "type": "node",
       "request": "launch",
-      "cwd": "${workspaceFolder}",
       "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "--import",
-        "tsx"
-      ],
-      "program": "${workspaceFolder}/playground/debug-basics.ts",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Debug Board Meeting Playground",
-      "type": "node",
-      "request": "launch",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/cli.ts",
+      "args": ["${input:relayMessage}"],
       "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "--import",
-        "tsx"
-      ],
-      "program": "${workspaceFolder}/playground/index.ts",
-      "args": [
-        "--",
-        "lets",
-        "work",
-        "on",
-        "the",
-        "board",
-        "meeting",
-        "in",
-        "2",
-        "weeks"
-      ],
-      "envFile": "${workspaceFolder}/.env.local",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Debug Relay Worker",
-      "type": "node",
-      "request": "launch",
-      "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "--import",
-        "tsx"
-      ],
-      "program": "${workspaceFolder}/runtime/src/worker.ts",
-      "envFile": "${workspaceFolder}/.env.local",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "console": "integratedTerminal"
-    },
-    {
-      "name": "Debug Current TS File",
-      "type": "node",
-      "request": "launch",
-      "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "--import",
-        "tsx"
-      ],
-      "program": "${file}",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

@@ -316,16 +316,6 @@ Goal:
 
 ---
 
-## Open Questions
-
-- Should human clarification be represented as a terminal action, a human tool call, or both depending on context?
-- Where should resumable workflow state live so it is durable without being awkward?
-- How much of the current coding-agent planner surface should be narrowed by workflow declarations?
-- Should tasks and tools share one executable interface or remain distinct but parallel?
-- How small can the global doctrine prompt become once workflows and runtime contracts are explicit?
-
----
-
 ## Bottom Line
 
 The architecture is about preserving a few strong properties:

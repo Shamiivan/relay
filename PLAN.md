@@ -7,6 +7,56 @@ Handles email, calendar, docs, campaigns — via Discord.
 
 ---
 
+## Current State
+
+### Agent Runtime (`cli.ts`)
+Thread-based context with ephemeral sessions per turn. Each turn creates a fresh `createAgentSession` seeded with the full serialized thread — system prompt never drifts.
+
+**Thread bootstrap (before turn 1):**
+- `system_note` — CONTRACT with rules
+- `executable_call/result` — `tree workflows` output (agent sees all tools immediately)
+- `executable_call/result` — all `README.md` files pre-loaded (agent knows tool input/output format before acting)
+- `user_message` — the user's request
+
+**Loop:**
+- Bash events (`tool_execution_start/end`) captured into thread → full tool call history visible across turns
+- Terminal JSON parsed → `done_for_now` or `request_more_information`
+- Parse failures → `system_note` re-prompt, continue
+- `done_for_now` with zero bash calls after a human turn → `system_note` enforcement, continue
+- `request_more_information` → ask human, append `human_response`, continue
+
+**Approval gate:** destructive commands (`docs.write`, `drive.copy`) intercepted at the bash tool `execute` level — human must type `yes` before the command runs.
+
+### Tool convention
+- Workflow tools live in `workflows/<name>/tools/<tool>/run` — any executable that reads JSON from stdin and writes JSON to stdout
+- **Tools can be any language** — bash, Python, Go, TypeScript, Ruby, anything. The only contract is stdin → stdout JSON
+- Canonical TypeScript tools live in `tools/` — use `defineTool` + `runDeclaredTool` from `tools/sdk.ts`; workflow `run` scripts are bash shims that `exec tsx <tool.ts>`
+- Each tool has a `README.md` with input schema, usage examples, and output shape
+- `package.json` with `"bin": { "run": "./run" }` in every tool directory
+
+**Tool output envelope — always the same shape:**
+```json
+{ "ok": true,  "result": { ... } }
+{ "ok": false, "error":  { "type": "string", "message": "string" } }
+```
+- `ok: true` → success, data in `result`
+- `ok: false` → failure, reason in `error.type` + optional `error.message`
+- The agent checks `ok` first — no need to guess whether an empty array is an error or a valid empty result
+
+### Workflows built
+- `workflows/adding_numbers/` — add, subtract, multiply, divide
+- `workflows/board_meeting_prep/` — drive.search, docs.read, docs.write, drive.copy, time.now
+  - `drive.search` shims `tools/gworkspace/drive/drive.search/tool.ts` (googleapis + OAuth)
+  - `docs.read` shims `tools/gworkspace/docs/docs.read/tool.ts`
+  - `docs.write` shims `tools/gworkspace/docs/docs.write/tool.ts` ← approval-gated
+  - `drive.copy` shims `tools/gworkspace/drive/drive.copy/tool.ts` ← approval-gated
+  - `time.now` shims `tools/time/tool.ts` — returns ISO + local + timestamp
+
+### Auth
+Google OAuth via `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` in `.env.local`. Loaded by dotenv in `cli.ts`; inherited by all bash subprocesses automatically.
+
+---
+
 ## Philosophy
 
 **Worse is Better (New Jersey approach):**
@@ -27,52 +77,9 @@ Handles email, calendar, docs, campaigns — via Discord.
 - Parse boundaries with Zod and keep internal/result shapes explicit
 - Avoid `any`, implicit shapes, and `Record<string, unknown>` in core paths unless there is no stable schema yet
 
-**No BAML.** Provider-agnostic model layer + Zod only.
 
 **use jsdoc for documentation** important for the human to understand teh code
 
-## Context Building Rule
-
-Build model-facing context explicitly.
-
-Good:
-
-- `const plannerContext = await buildDetermineNextStepContext({ thread, workflow })`
-- `const request = buildDetermineNextStepRequest(plannerContext)`
-- pass `plannerContext` or `request` into the planner as normal values
-
-Avoid:
-
-- mutating `Thread` with planner-only fields like contract, prompt sections, schema, or system instruction
-- hiding prompt assembly across multiple call sites
-- deriving the same schema/prompt in two places
-
-Reason:
-
-- `Thread` should represent active reasoning state, not act as a dependency-injection bag
-- workflow policy should stay explicit at the call site
-- context engineering should expose the exact inputs to the model, because context is a limited resource
-- the smallest high-signal context is easier to debug than implicit state spread across the runtime
-
-Preferred shape:
-
-- `Thread` owns events, state, and serialization of thread history
-- `Workflow` owns available tasks, tools, terminal intents, and workflow prompt files
-- `buildDetermineNextStepContext(...)` combines `Thread` + `Workflow` into a plain data object
-- `buildDetermineNextStepRequest(...)` derives prompt, schema, and system instruction from that object
-- `determineNextStep(...)` receives the fully built request instead of reaching back into mutable thread fields
-
-If a line of code looks like this:
-
-```ts
-const context = await buildWorkflowDetermineNextStepContext(args.workflow);
-loadContext(args.thread, context);
-const contextSchema = buildDetermineNextStepSchema(context.contract);
-const systemInstruction = "You are a helpful assistant that decides the next step.";
-```
-
-that is a sign the design is only half explicit. The context is built explicitly, but then partially smeared back onto `thread`.
-Prefer one explicit object that contains the planner inputs end-to-end.
 
 # Dev rules:
 1. Clear Separation of Concerns
