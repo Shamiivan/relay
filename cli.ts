@@ -20,13 +20,59 @@ type NextStep =
 
 const CONTRACT = `You are a workflow agent with a bash tool.
 
-The full conversation history is in XML tags above. A tree of available workflows has already been pre-loaded — look for it in the <executable_result> tags above.
+The full conversation history is in XML tags above.
+
+You have access to workflow tools on disk under \`workflows/\`.
 
 Rules:
-- Pick a workflow tool from the tree that matches the request
-- Read its README if needed: cat workflows/<name>/tools/<tool>/README.md
-- Run it by piping JSON: printf '<json>' | workflows/<name>/tools/<tool>/run
-- NEVER compute results mentally — base your answer entirely on tool output
+- First inspect the available workflows using bash
+- Then choose the workflow and tool that best match the request
+- Read the workflow README or tool README if needed
+- Run the tool by piping JSON into its \`run\` script
+- NEVER answer from memory or general knowledge
+- Base your answer entirely on tool output
+
+Helpful commands:
+- Inspect available workflows:
+  tree workflows
+- Read a workflow README:
+  cat workflows/<workflow>/README.md
+- Read a tool README:
+  cat workflows/<workflow>/tools/<tool>/README.md
+- Run a tool:
+  printf '<json>' | workflows/<workflow>/tools/<tool>/run
+
+Examples:
+
+Example 1: Generic web research
+User: "What are top agency pain points?"
+Good behavior:
+1. Run:
+   tree workflows
+2. Choose the generic web workflow unless the user explicitly asks for a sales-specific workflow
+3. Read the tool README if needed:
+   cat workflows/public_web_search/tools/web.search/README.md
+4. Run:
+   printf '{"query":"top agency pain points","count":5}' | workflows/public_web_search/tools/web.search/run
+5. Return only:
+   {"intent":"done_for_now","message":"<answer grounded in the tool output>"}
+
+Example 2: Need clarification
+User: "Research Acme for outreach"
+Good behavior:
+1. Run:
+   tree workflows
+2. If the request is ambiguous, return only:
+   {"intent":"request_more_information","message":"What kind of outreach do you want: sales prospecting, partnership outreach, or something else?"}
+
+Example 3: Invalid behavior
+User: "What are top agency pain points?"
+Bad behavior:
+- Do not answer from memory
+- Do not skip the tool call
+- Do not return:
+  {"intent":"done_for_now","message":"Based on my research..."}
+  unless you actually ran a workflow tool
 
 Output ONLY one of these when done (no markdown, no surrounding text):
 {"intent":"request_more_information","message":"<question>"}
@@ -146,23 +192,12 @@ const discoveryResult = (() => {
   }
 })();
 
-const readmeCommand = "find workflows -name README.md | sort | xargs -I{} sh -c 'echo \"=== {} ===\"; cat \"{}\"; echo'";
-const readmeResult = (() => {
-  try {
-    return execSync(readmeCommand, { cwd: process.cwd(), encoding: "utf8" });
-  } catch {
-    return "";
-  }
-})();
-
 const thread = new Thread({
   state: null,
   events: [
     { type: "system_note", data: CONTRACT },
     { type: "executable_call", data: { executableName: "bash", args: discoveryCommand } },
     { type: "executable_result", data: { executableName: "bash", result: discoveryResult } },
-    { type: "executable_call", data: { executableName: "bash", args: readmeCommand } },
-    { type: "executable_result", data: { executableName: "bash", result: readmeResult } },
     { type: "user_message", data: message },
   ],
 });

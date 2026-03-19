@@ -11,6 +11,6 @@ Search the public web and return result titles, URLs, and snippets.
 ## Examples
 
 ```bash
-printf '{"query":"B2B SaaS pain points","count":5}' | workflows/sales_outreach/tools/web.search/run
-printf '{"query":"site:github.com relay agent","count":3,"offset":1}' | workflows/sales_outreach/tools/web.search/run
+printf '{"query":"B2B SaaS pain points","count":5}' | workflows/public_web_search/tools/web.search/run
+printf '{"query":"site:github.com relay agent","count":3,"offset":1}' | workflows/public_web_search/tools/web.search/run
 ```

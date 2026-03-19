@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(repoRoot, "workflows/sales_outreach/tools/web.search/run");
+const shimPath = path.resolve(repoRoot, "workflows/sales_prospect_research/tools/web.search/run");
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
