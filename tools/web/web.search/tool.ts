@@ -77,6 +77,25 @@ function buildWebSearchUrl(input: z.output<typeof inputSchema>): string {
   return url.toString();
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]+>/g, " ");
+}
+
+function normalizeSnippet(value: string): string {
+  return decodeHtmlEntities(stripHtmlTags(value))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeResults(payload: z.output<typeof responseSchema>): WebSearchResult[] {
   return payload.web.results.flatMap((result) => {
     if (!result.title || !result.url || !result.description) {
@@ -85,7 +104,7 @@ function normalizeResults(payload: z.output<typeof responseSchema>): WebSearchRe
     return [{
       title: result.title,
       url: result.url,
-      description: result.description,
+      description: normalizeSnippet(result.description),
     }];
   });
 }
@@ -98,7 +117,6 @@ export async function searchWeb(
   },
 ): Promise<{
   results: WebSearchResult[];
-  total: number;
   query: string;
   moreResultsAvailable: boolean;
 }> {
@@ -128,7 +146,6 @@ export async function searchWeb(
 
   return {
     results,
-    total: results.length,
     query: payload.query.original ?? input.query,
     moreResultsAvailable: payload.query.more_results_available ?? false,
   };
@@ -143,7 +160,6 @@ export const webSearchTool = defineTool({
   input: inputSchema,
   output: z.object({
     results: z.array(resultSchema).default([]),
-    total: z.number().int().nonnegative(),
     query: z.string(),
     moreResultsAvailable: z.boolean(),
   }),
