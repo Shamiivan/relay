@@ -29,3 +29,6 @@ Workflows specific to a company context live under `company/workflows/` rather t
 
 **web.search tool: Brave Search API via direct REST**
 Chose Brave over Tavily/Exa/Serper. Fits Unix tool philosophy — simple HTTP call, structured JSON snippets, no AI preprocessing. Independent index (not Google scraping). 2k free/mo, $5/1k paid, 50 req/s. No official TS SDK needed — plain `fetch`. If full page content is needed later, add a separate `web.fetch` tool (see OpenClaw pattern). Tavily returns full content but adds an extra abstraction layer we don't need yet.
+
+**credentials are required per tool, not by a shared sales preflight module**
+Do not use a broad `tools/lib/env.ts` that fails on unrelated provider keys. Each tool validates only the credential it actually needs at runtime, for example `web.search` requires `BRAVE_API_KEY` and nothing else. If workflow-level preflight is needed later, add it at the workflow entrypoint, not inside reusable tool modules.

@@ -16,7 +16,7 @@
     "tools:codegen": "tsx tools/codegen.ts",
     "inspector": "tsx apps/inspector/src/index.tsx",
     "check": "tsc -p tsconfig.base.json --noEmit",
-    "test": "node --import tsx --test tools/lib/*.test.ts"
+    "test": "node --import tsx --test \"tools/**/*.test.ts\""
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "file:./pi-mono/packages/coding-agent",
