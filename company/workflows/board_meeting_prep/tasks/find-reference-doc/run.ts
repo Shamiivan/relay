@@ -22,9 +22,8 @@ rl.on("close", () => {
         : "Use a broader board-related query to discover strong candidates.",
     };
 
-    process.stdout.write(JSON.stringify(result) + "\n");
+    process.stdout.write(JSON.stringify({ ok: true, result }) + "\n");
   } catch (err) {
-    process.stderr.write(String(err) + "\n");
-    process.exit(1);
+    process.stdout.write(JSON.stringify({ ok: false, error: { type: "internal_error", message: String(err) } }) + "\n");
   }
 });
