@@ -1,6 +1,0 @@
-{
-  "name": "@relay/tool-public-web-search-workflow",
-  "version": "0.0.1",
-  "type": "module",
-  "bin": { "run": "./run" }
-}

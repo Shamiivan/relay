@@ -1,6 +1,0 @@
-{
-  "name": "@relay/tool-apollo-organization-show",
-  "version": "0.0.1",
-  "type": "module",
-  "bin": { "run": "./run" }
-}

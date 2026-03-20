@@ -1,6 +1,0 @@
-{
-  "name": "@relay/tool-instantly-email-search",
-  "version": "0.0.1",
-  "type": "module",
-  "bin": { "run": "./run" }
-}

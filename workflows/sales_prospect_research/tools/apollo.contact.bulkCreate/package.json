@@ -1,6 +1,0 @@
-{
-  "name": "@relay/tool-apollo-contact-bulk-create",
-  "version": "0.0.1",
-  "type": "module",
-  "bin": { "run": "./run" }
-}
