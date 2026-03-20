@@ -11,6 +11,9 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: file:./pi-mono/packages/coding-agent
         version: file:pi-mono/packages/coding-agent(ws@8.19.0)(zod@4.3.6)
+      '@sinclair/typebox':
+        specifier: ^0.34.48
+        version: 0.34.48
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.14
@@ -84,6 +87,18 @@ importers:
   workflows/board-meeting-prep/tools/drive.copy: {}
 
   workflows/board-meeting-prep/tools/drive.search: {}
+
+  workflows/public_web_search/tools/web.fetch: {}
+
+  workflows/public_web_search/tools/web.fetch-llm: {}
+
+  workflows/public_web_search/tools/web.search: {}
+
+  workflows/sales_prospect_research/tools/web.fetch: {}
+
+  workflows/sales_prospect_research/tools/web.fetch-llm: {}
+
+  workflows/sales_prospect_research/tools/web.search: {}
 
 packages:
 
