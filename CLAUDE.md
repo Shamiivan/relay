@@ -39,11 +39,8 @@ Always check `ok` first. Never inspect raw fields to determine success.
 4. `workflows/<workflow>/tools/<tool.name>/README.md` — input/output docs the agent reads at startup
 5. If destructive: add pattern to `DESTRUCTIVE_PATTERNS` in `cli.ts`
 
-`tools/_generated/` is not used at runtime. Codegen is optional.
 
 ## Active plan
-
-`AGENTS/plans/2026-03-19-sales-workflow-slices.md` — sales_outreach workflow, 9 slices, Slice 0 complete.
 
 ## Google auth
 

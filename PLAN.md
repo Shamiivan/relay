@@ -3,59 +3,9 @@
 > Note: Development is use-case-first. We are intentionally not building the full abstract system up front. The first vertical slice is: agent can access email. Architecture should stay minimal and only expand when a real use case forces it.
 
 A composable workspace agent built on Unix philosophy and "Worse is Better".
-Handles email, calendar, docs, campaigns — via Discord.
+Handles email, calendar, docs, emails campaigns — via Discord.
 
----
 
-## Current State
-
-### Agent Runtime (`cli.ts`)
-Thread-based context with ephemeral sessions per turn. Each turn creates a fresh `createAgentSession` seeded with the full serialized thread — system prompt never drifts.
-
-**Thread bootstrap (before turn 1):**
-- `system_note` — CONTRACT with rules
-- `executable_call/result` — `tree workflows` output (agent sees all tools immediately)
-- `executable_call/result` — all `README.md` files pre-loaded (agent knows tool input/output format before acting)
-- `user_message` — the user's request
-
-**Loop:**
-- Bash events (`tool_execution_start/end`) captured into thread → full tool call history visible across turns
-- Terminal JSON parsed → `done_for_now` or `request_more_information`
-- Parse failures → `system_note` re-prompt, continue
-- `done_for_now` with zero bash calls after a human turn → `system_note` enforcement, continue
-- `request_more_information` → ask human, append `human_response`, continue
-
-**Approval gate:** destructive commands (`docs.write`, `drive.copy`) intercepted at the bash tool `execute` level — human must type `yes` before the command runs.
-
-### Tool convention
-- Workflow tools live in `workflows/<name>/tools/<tool>/run` — any executable that reads JSON from stdin and writes JSON to stdout
-- **Tools can be any language** — bash, Python, Go, TypeScript, Ruby, anything. The only contract is stdin → stdout JSON
-- Canonical TypeScript tools live in `tools/` — use `defineTool` + `runDeclaredTool` from `tools/sdk.ts`; workflow `run` scripts are bash shims that `exec tsx <tool.ts>`
-- Each tool has a `README.md` with input schema, usage examples, and output shape
-- `package.json` with `"bin": { "run": "./run" }` in every tool directory
-
-**Tool output envelope — always the same shape:**
-```json
-{ "ok": true,  "result": { ... } }
-{ "ok": false, "error":  { "type": "string", "message": "string" } }
-```
-- `ok: true` → success, data in `result`
-- `ok: false` → failure, reason in `error.type` + optional `error.message`
-- The agent checks `ok` first — no need to guess whether an empty array is an error or a valid empty result
-
-### Workflows built
-- `workflows/adding_numbers/` — add, subtract, multiply, divide
-- `workflows/board_meeting_prep/` — drive.search, docs.read, docs.write, drive.copy, time.now
-  - `drive.search` shims `tools/gworkspace/drive/drive.search/tool.ts` (googleapis + OAuth)
-  - `docs.read` shims `tools/gworkspace/docs/docs.read/tool.ts`
-  - `docs.write` shims `tools/gworkspace/docs/docs.write/tool.ts` ← approval-gated
-  - `drive.copy` shims `tools/gworkspace/drive/drive.copy/tool.ts` ← approval-gated
-  - `time.now` shims `tools/time/tool.ts` — returns ISO + local + timestamp
-
-### Auth
-Google OAuth via `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` in `.env.local`. Loaded by dotenv in `cli.ts`; inherited by all bash subprocesses automatically.
-
----
 
 ## Philosophy
 
