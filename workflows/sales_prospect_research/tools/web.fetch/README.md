@@ -1,15 +1,26 @@
 ---
 intent: web.fetch
-description: Fetch a URL and return its content as clean plain text
+description: Fetch a URL and return its full content as clean plain text. Best for reading a specific page in full.
+shared_tool: tools/web/web.fetch
+mutates: false
+destructive: false
 fields:
   url: "string: The https:// URL to fetch"
   maxChars: "number: Maximum characters to return, from 1000 to 50000 (default 20000)"
+returns:
+  url: "string: Fetched URL"
+  title: "string: Returned title value"
+  content: "string: Cleaned plain-text content"
+  truncated: "boolean: True when the content was shortened"
 ---
-Fetch a single URL and return its full content as plain text with HTML stripped. Use this after web.search to read a page in full.
+`web.fetch` fetches a URL and returns its full content as clean plain text. Best for reading a specific page in full.
 
-## Examples
+Safety: read-only external fetch. No records are created, updated, or deleted.
+
+This workflow exposes the shared `tools/web/web.fetch` implementation; inputs and outputs are identical.
+
+## Example
 
 ```bash
 printf '{"url":"https://example.com/about"}' | workflows/sales_prospect_research/tools/web.fetch/run
-printf '{"url":"https://example.com/blog/post","maxChars":5000}' | workflows/sales_prospect_research/tools/web.fetch/run
 ```

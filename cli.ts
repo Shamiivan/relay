@@ -30,6 +30,9 @@ Rules:
 - To answer the user: run a workflow tool via bash, then call done_for_now with the result.
 - If tool results are already in the conversation, call done_for_now immediately.
 - done_for_now is the ONLY way to complete the task.
+- Read workflow guidance with: cat workflows/<name>/README.md
+- Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md
+- When the correct tool or arguments are not obvious, read the relevant README before running the tool.
 
 Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run`;
 
@@ -277,13 +280,21 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   });
 
   try {
+    writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
+    console.error("[DEBUG] before turn", turn, thread.serializeForLLM());
     await session.prompt(thread.serializeForLLM());
+    if (DEBUG_THREAD) {
+      writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
+      console.error("[DEBUG] after turn", turn, thread.serializeForLLM());
+    }
   } finally {
+    writeFileSync(`${runDir}/turn-${turn}-final.txt`, thread.serializeForLLM(), "utf8");
+    console.error("[Final] after turn", turn, thread.serializeForLLM());
+    console.error("END of execution");
     unsubscribe();
     session.dispose();
   }
 
-  writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
 
   if (doneMessage !== null) {
     console.log(doneMessage);

@@ -1,11 +1,16 @@
 ---
 intent: board_meeting_prep
 description: Prepare or revise board meeting documents using Google Drive and Docs
-fields:
+fields: {}
 ---
-You are running the board meeting preparation workflow.
+Use `board_meeting_prep` to find, read, copy, and revise board-meeting documents in Google Drive and Google Docs.
 
-Use Drive and Docs tools directly when the workflow step requires them.
+Available tools:
+- `time.now` for current date and time
+- `drive.search` for board-document discovery in Drive
+- `drive.copy` for copying a source document into a working draft
+- `docs.read` for reading a Google Doc as plain text
+- `docs.write` for replacing a Google Doc body with revised text
 
 Rules:
 - Prefer the most recent strong board-related document as the reference when no explicit user preference is given.

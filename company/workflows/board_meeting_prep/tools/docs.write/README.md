@@ -1,28 +1,34 @@
 ---
 intent: docs.write
-description: Replace the working board-meeting Google Doc with the revised content
+description: Replace the body text of a Google Docs document when you know the document id.
+shared_tool: tools/gworkspace/docs/docs.write
+prompt_ref: tools/gworkspace/docs/docs.write/prompt.md
+mutates: true
+destructive: true
+destructive_reason: Replaces the entire Google Docs body.
 fields:
   documentId: "string: The Google Docs document id to write to"
   text: "string: The full replacement document body (plain text)"
+returns:
+  documentId: "string: Google Docs document identifier"
+  updated: "boolean: True when the document write succeeded"
 ---
-Replace the full content of a Google Docs document with new text. This is destructive — it overwrites the entire body.
+`docs.write` replaces the body text of a Google Docs document when you know the document id.
 
-## Usage
+Safety: destructive mutation. Replaces the entire Google Docs body.
 
-Always read the document first with `docs.read`, revise the text, then write it back:
+This workflow exposes the shared `tools/gworkspace/docs/docs.write` implementation; inputs and outputs are identical.
 
-```
-printf '{"documentId":"1GkOrFXGIpgyz9o-...","text":"Full updated document text here"}' | workflows/board_meeting_prep/tools/docs.write/run
-```
-
-## Output
-
-```json
-{ "documentId": "1GkOrFXGIpgyz9o-...", "success": true }
-```
+See `tools/gworkspace/docs/docs.write/prompt.md` for deeper examples and operating guidance.
 
 ## Rules
 
 - Pass the complete document text — partial updates are not supported
 - Preserve the existing structure and tone unless the user explicitly asks for changes
 - Return plain text only — no markdown formatting
+
+## Example
+
+```bash
+printf '{"documentId":"1GkOrFXGIpgyz9o-...","text":"Full updated document text here"}' | company/workflows/board_meeting_prep/tools/docs.write/run
+```

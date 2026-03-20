@@ -1,27 +1,24 @@
 ---
 intent: docs.read
-description: Read a specific Google Doc to inspect the board-meeting structure or content
+description: Read a Google Docs document as plain text when you know the document id.
+shared_tool: tools/gworkspace/docs/docs.read
+mutates: false
+destructive: false
 fields:
   documentId: "string: The Google Docs document id (from drive.search results)"
+returns:
+  documentId: "string: Google Docs document identifier"
+  title: "string: Returned title value"
+  text: "string: Google Docs body text"
 ---
-Read a Google Docs document and return its plain text content with title and documentId.
+`docs.read` reads a Google Docs document as plain text when you know the document id.
 
-## Usage
+Safety: read-only operation. No records are created, updated, or deleted.
 
-Get the `documentId` from a `drive.search` result (the `id` field), then pipe it in:
+This workflow exposes the shared `tools/gworkspace/docs/docs.read` implementation; inputs and outputs are identical.
 
+## Example
+
+```bash
+printf '{"documentId":"1GkOrFXGIpgyz9o-YfxCSknbybApmKYbTga92YelGIqw"}' | company/workflows/board_meeting_prep/tools/docs.read/run
 ```
-printf '{"documentId":"1GkOrFXGIpgyz9o-YfxCSknbybApmKYbTga92YelGIqw"}' | workflows/board_meeting_prep/tools/docs.read/run
-```
-
-## Output
-
-```json
-{
-  "documentId": "1GkOrFXGIpgyz9o-...",
-  "title": "Mar 22, 2026 | Board Meeting",
-  "text": "Full plain text content of the document..."
-}
-```
-
-Use the `text` field to read the document contents. The `documentId` is echoed back for reference.

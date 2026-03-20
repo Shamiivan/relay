@@ -1,6 +1,10 @@
 ---
 intent: instantly.email.search
-description: Search Instantly email activity using API v2
+description: Search Instantly email activity using the API v2 emails endpoint.
+shared_tool: tools/instantly/email/instantly.email.search
+prompt_ref: tools/instantly/email/instantly.email.search/prompt.md
+mutates: false
+destructive: false
 fields:
   limit: "number: Maximum emails to return, from 1 to 100 (default 10)"
   startingAfter: "string: Pagination cursor from a previous response"
@@ -22,12 +26,20 @@ fields:
   emailType: "string: received | sent | manual"
   minTimestampCreated: "string: Lower timestamp bound"
   maxTimestampCreated: "string: Upper timestamp bound"
+returns:
+  emails: "Email[]: Normalized email activity records"
+  nextStartingAfter: "string: Cursor for the next page when present"
 ---
-Search and list email activity from Instantly API v2.
+`instantly.email.search` searches Instantly email activity using the API v2 emails endpoint.
 
-## Examples
+Safety: read-only operation. No records are created, updated, or deleted.
+
+This workflow exposes the shared `tools/instantly/email/instantly.email.search` implementation; inputs and outputs are identical.
+
+See `tools/instantly/email/instantly.email.search/prompt.md` for deeper examples and operating guidance.
+
+## Example
 
 ```bash
 printf '{"search":"welcome","limit":5}' | workflows/sales_prospect_research/tools/instantly.email.search/run
-printf '{"campaignId":"019c0e38-c5be-70d5-b730-fdd27bea4548","eaccount":["sender@example.com"],"isUnread":true}' | workflows/sales_prospect_research/tools/instantly.email.search/run
 ```
