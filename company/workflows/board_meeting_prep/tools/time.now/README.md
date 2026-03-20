@@ -10,6 +10,7 @@ returns:
   local: "string: Locale-formatted local time string"
   timestamp: "number: Unix timestamp in milliseconds"
 ---
+
 `time.now` gets the current date and time.
 
 Safety: read-only operation. No records are created, updated, or deleted.
@@ -19,5 +20,5 @@ This workflow exposes the shared `tools/time` implementation; inputs and outputs
 ## Example
 
 ```bash
-company/workflows/board_meeting_prep/tools/time.now/run
+print '{}' | company/workflows/board_meeting_prep/tools/time.now/run
 ```

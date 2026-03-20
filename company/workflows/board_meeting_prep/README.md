@@ -5,6 +5,12 @@ fields: {}
 ---
 Use `board_meeting_prep` to find, read, copy, and revise board-meeting documents in Google Drive and Google Docs.
 
+Phase 0: company discovery
+
+- read the relevant company brief in `company/<name>/README.md` before searching for documents
+- use the company brief to understand board context, current positioning, and any standing constraints
+- if the company brief is missing or too thin, stop and ask for the missing context before drafting
+
 Available tools:
 - `time.now` for current date and time
 - `drive.search` for board-document discovery in Drive

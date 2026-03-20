@@ -10,6 +10,14 @@ Execution happens in a local worker process, while Convex stores sessions, sessi
 The current vertical slice is: Discord message in, run persisted in Convex, local worker discovers command tools from `tools/`, executes them through one specialist, reply back to Discord.
 The backend source of truth lives directly in `convex`, the worker lives in `runtime/src`, prompts and static context stay in Markdown, and config stays in JSON.
 
+## Company Context
+
+Root `workflows/` is for generic, reusable workflows.
+`company/` is for company-specific context, discovery material, and workflows that depend on one company's operating reality.
+
+When a workflow needs company context first, put that workflow under `company/workflows/` and make the discovery step explicit.
+Company background should live alongside the workflow in `company/<name>/` rather than in a separate sibling repo.
+
 Relay keeps one architectural rule intentionally narrow:
 
 - session history is for humans
