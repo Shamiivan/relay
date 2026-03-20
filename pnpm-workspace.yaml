@@ -3,3 +3,5 @@ packages:
   - packages/*
   - workflows/*/tasks/*
   - workflows/*/tools/*
+  - company/workflows/*/tasks/*
+  - company/workflows/*/tools/*

@@ -1,6 +1,6 @@
 import type { ModelTool } from "../packages/model/src";
 import { z } from "zod";
-import { readJsonInput, writeJsonOutput } from "./lib/json-stdio";
+import { JsonStdinError, readJsonInput, writeJsonOutput } from "./lib/json-stdio";
 
 export const toolCapabilityValues = [
   "search",
@@ -131,6 +131,10 @@ export async function runDeclaredTool<TTool extends ToolDeclaration>(
   } catch (error) {
     if (tool.onError) {
       writeJsonOutput({ ok: false, error: await tool.onError(error) });
+      return;
+    }
+    if (error instanceof JsonStdinError) {
+      writeJsonOutput({ ok: false, error: { type: "invalid_input", message: error.message } });
       return;
     }
     const message = error instanceof Error ? error.message : "Unknown error";

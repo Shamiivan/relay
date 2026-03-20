@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -99,6 +100,30 @@ test("file.write: executable returns explicit error envelopes", {
       type: "path_not_allowed",
       message: `Path must stay inside the workspace root: ${workspaceRoot}`,
       path: "../outside.md",
+    },
+  });
+
+  const emptyStdinResult = spawnSync(
+    process.execPath,
+    ["--import", tsxLoaderPath, toolPath],
+    {
+      cwd: workspaceRoot,
+      env: process.env,
+      encoding: "utf8",
+      input: "",
+    },
+  );
+
+  if (emptyStdinResult.error) {
+    throw emptyStdinResult.error;
+  }
+
+  assert.equal(emptyStdinResult.status, 0);
+  assert.deepEqual(JSON.parse(emptyStdinResult.stdout), {
+    ok: false,
+    error: {
+      type: "invalid_input",
+      message: "Expected JSON on stdin. Provide '{}' for tools with no arguments.",
     },
   });
 });

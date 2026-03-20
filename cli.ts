@@ -18,10 +18,10 @@ import type { ThreadEvent } from "./runtime/src/thread.ts";
 
 config({ path: new URL(".env.local", import.meta.url).pathname });
 
-const CONTRACT = `You are a workflow agent. Your ONLY output mechanism is tool calls — never respond with plain text.
+const CONTRACT = `You are a the company chief of staff assitnt to the CEO. Your ONLY output mechanism is tool calls — never respond with plain text.
 
 Tools:
-- bash: discover and run workflow tools under workflows/
+- bash: discover and run workflow tools under workflows/ and company/workflows/
 - ask_human: ask the user for clarification when their request is ambiguous
 - done_for_now: deliver your final answer — ALWAYS call this to complete the task
 
@@ -30,13 +30,14 @@ Rules:
 - To answer the user: run a workflow tool via bash, then call done_for_now with the result.
 - If tool results are already in the conversation, call done_for_now immediately.
 - done_for_now is the ONLY way to complete the task.
-- Read workflow guidance with: cat workflows/<name>/README.md
-- Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md
+- Read workflow guidance with: cat workflows/<name>/README.md or cat company/workflows/<name>/README.md
+- Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md or cat company/workflows/<name>/tools/<tool>/README.md
 - When the correct tool or arguments are not obvious, read the relevant README before running the tool.
 
-Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run`;
+Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run or printf '<json>' | company/workflows/<name>/tools/<tool>/run`;
 
 const DEBUG_THREAD = process.env.DEBUG_THREAD === "1";
+const WORKFLOW_RUN_PATTERN = /(?:^|[^/])(workflows|company\/workflows)\/.*\/tools\/.*\/run/;
 
 function formatEventShort(event: ThreadEvent): string {
   switch (event.type) {
@@ -112,14 +113,18 @@ function createDoneForNowTool(
     label: "Done",
     description:
       "Call this with the final answer when the task is complete. " +
-      "Only call after running at least one workflow tool (workflows/.../run) via bash. " +
+      "Only call after running at least one workflow tool " +
+      "((workflows/.../run) or (company/workflows/.../run)) via bash. " +
       "Do not call from memory or after only running discovery commands.",
     parameters: Type.Object({
       message: Type.String({ description: "The final answer to return to the user" }),
     }),
     execute: async (_toolCallId: string, params: { message: string }) => {
       if (!getWorkflowToolCalled()) {
-        const msg = "ERROR: You must run a workflow tool (workflows/.../tools/.../run) via bash before calling done_for_now. Run the appropriate tool first.";
+        const msg =
+          "ERROR: You must run a workflow tool " +
+          "((workflows/.../tools/.../run) or (company/workflows/.../tools/.../run)) via bash " +
+          "before calling done_for_now. Run the appropriate tool first.";
         thread.append({ type: "system_note", data: msg });
         return { content: [{ type: "text", text: msg }] };
       }
@@ -135,12 +140,12 @@ function createDoneForNowTool(
 
 // Commands matching these patterns require human approval before running
 const DESTRUCTIVE_PATTERNS = [
-  /workflows\/.*\/tools\/docs\.write\/run/,
-  /workflows\/.*\/tools\/drive\.copy\/run/,
-  /workflows\/.*\/tools\/apollo\.contact\.bulkCreate\/run/,
-  /workflows\/.*\/tools\/apollo\.contact\.bulkUpdate\/run/,
-  /workflows\/.*\/tools\/apollo\.account\.bulkCreate\/run/,
-  /workflows\/.*\/tools\/apollo\.field\.create\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/docs\.write\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/drive\.copy\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.contact\.bulkCreate\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.contact\.bulkUpdate\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.account\.bulkCreate\/run/,
+  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.field\.create\/run/,
 ];
 
 function withApprovalGate(
@@ -199,12 +204,12 @@ if (!message) {
 
 const resourceLoader = createMinimalResourceLoader();
 
-const discoveryCommand = "tree workflows";
+const discoveryCommand = "find workflows company/workflows -maxdepth 3 \\( -type d -o -type f \\) | sort";
 const discoveryResult = (() => {
   try {
     return execSync(discoveryCommand, { cwd: process.cwd(), encoding: "utf8" });
   } catch {
-    return execSync("find workflows -name run | sort", { cwd: process.cwd(), encoding: "utf8" });
+    return execSync("find workflows company/workflows -name run | sort", { cwd: process.cwd(), encoding: "utf8" });
   }
 })();
 
@@ -239,6 +244,9 @@ mkdirSync(runDir, { recursive: true });
 
 for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   let doneMessage: string | null = null;
+  const writeTurnSnapshot = () => {
+    writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
+  };
 
   const { session, modelFallbackMessage } = await createAgentSession({
     resourceLoader,
@@ -264,7 +272,7 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
       const command = typeof event.args === "object" && event.args !== null && "command" in event.args
         ? String((event.args as { command: unknown }).command)
         : String(event.args);
-      if (/workflows\/.*\/tools\/.*\/run/.test(command)) {
+      if (WORKFLOW_RUN_PATTERN.test(command)) {
         workflowToolCalled = true;
       }
       thread.append({ type: "executable_call", data: { executableName: "bash", args: command } });
@@ -277,18 +285,17 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
         data: { executableName: "bash", result: result },
       });
     }
+
   });
 
   try {
-    writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
     console.error("[DEBUG] before turn", turn, thread.serializeForLLM());
     await session.prompt(thread.serializeForLLM());
     if (DEBUG_THREAD) {
-      writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
       console.error("[DEBUG] after turn", turn, thread.serializeForLLM());
     }
   } finally {
-    writeFileSync(`${runDir}/turn-${turn}-final.txt`, thread.serializeForLLM(), "utf8");
+    writeTurnSnapshot();
     console.error("[Final] after turn", turn, thread.serializeForLLM());
     console.error("END of execution");
     unsubscribe();

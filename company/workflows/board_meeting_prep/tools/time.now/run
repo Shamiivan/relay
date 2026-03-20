@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-ROOT="$(realpath "$(dirname "$0")/../../../..")"
+ROOT="$(realpath "$(dirname "$0")/../../../../..")"
 exec "$ROOT/node_modules/.bin/tsx" "$ROOT/tools/time/tool.ts"
