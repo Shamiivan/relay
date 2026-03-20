@@ -35,8 +35,8 @@ Always check `ok` first. Never inspect raw fields to determine success.
 
 1. `tools/<provider>/<tool.name>/tool.ts` — `defineTool()` with Zod input/output + `if (import.meta.main) runDeclaredTool(tool)`
 2. `tools/<provider>/<tool.name>/prompt.md` — usage guidance for the agent
-3. `workflows/<workflow>/tools/<tool.name>/run` — bash shim: `exec tsx <absolute path to tool.ts>`
-4. `workflows/<workflow>/tools/<tool.name>/README.md` — input/output docs the agent reads at startup
+3. `workflows/<workflow>/tools/<toolname.action>/run` — bash shim: `exec tsx <absolute path to tool.ts>`
+4. `workflows/<workflow>/tools/<toolname.action>/README.md` — input/output docs the agent reads at startup
 5. If destructive: add pattern to `DESTRUCTIVE_PATTERNS` in `cli.ts`
 
 
