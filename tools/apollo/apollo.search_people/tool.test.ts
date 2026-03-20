@@ -18,6 +18,9 @@ test("searchApolloPeople maps Apollo people into the tool output shape", async (
       titles: ["VP Sales", "Head of Growth"],
       personLocations: ["California, US"],
       keywords: "outbound",
+      body: {
+        contact_email_status_v2: ["verified"],
+      },
       page: 2,
       perPage: 2,
     },
@@ -68,6 +71,7 @@ test("searchApolloPeople maps Apollo people into the tool output shape", async (
     person_titles: ["VP Sales", "Head of Growth"],
     person_locations: ["California, US"],
     q_keywords: "outbound",
+    contact_email_status_v2: ["verified"],
     page: 2,
     per_page: 2,
   });

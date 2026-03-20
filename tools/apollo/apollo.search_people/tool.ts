@@ -17,6 +17,9 @@ const inputSchema = z.object({
   keywords: z.string().min(1).optional().describe(
     "Optional free-text keyword query for Apollo people search.",
   ),
+  body: z.object({}).passthrough().optional().describe(
+    "Additional native Apollo mixed_people/api_search request fields for advanced tuning.",
+  ),
   page: z.number().int().min(1).max(500).default(1).describe(
     "1-based Apollo result page to fetch.",
   ),
@@ -71,6 +74,7 @@ export async function searchApolloPeople(
     {
       path: "/mixed_people/api_search",
       body: {
+        ...(input.body ?? {}),
         organization_ids: input.organizationIds,
         person_titles: input.titles,
         person_locations: input.personLocations,

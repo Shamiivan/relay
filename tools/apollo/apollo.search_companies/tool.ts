@@ -32,6 +32,9 @@ const inputSchema = z.object({
   organizationDomains: z.array(z.string().min(1)).max(100).optional().describe(
     "Optional domain filter when the target account list is already partially known.",
   ),
+  body: z.object({}).passthrough().optional().describe(
+    "Additional native Apollo mixed_companies/search request fields for advanced tuning.",
+  ),
 }).refine(
   (value) => value.employeeCountMin === undefined
     || value.employeeCountMax === undefined
@@ -122,6 +125,7 @@ export async function searchApolloCompanies(
     {
       path: "/mixed_companies/search",
       body: {
+        ...(input.body ?? {}),
         page: input.page,
         per_page: input.perPage,
         q_keywords: combineKeywords(input),

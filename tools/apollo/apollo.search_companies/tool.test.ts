@@ -23,6 +23,9 @@ test("searchApolloCompanies maps Apollo companies into the tool output shape", a
       employeeCountMin: 11,
       employeeCountMax: 200,
       organizationDomains: ["example.com"],
+      body: {
+        sort_by_field: "employee_count",
+      },
     },
     {
       env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
@@ -72,6 +75,7 @@ test("searchApolloCompanies maps Apollo companies into the tool output shape", a
     organization_num_employees_ranges: ["11,200"],
     organization_industry_tag_ids: ["5567cd4773696439b10b0000"],
     organization_domains: ["example.com"],
+    sort_by_field: "employee_count",
   });
   assert.deepEqual(result, {
     companies: [
