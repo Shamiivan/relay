@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { execSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { config } from "dotenv";
 import { Type } from "@sinclair/typebox";
 import {
@@ -224,9 +225,12 @@ thread.append = (event: ThreadEvent) => {
 let completed = false;
 let workflowToolCalled = false;
 
-for (let turn = 0; turn < MAX_TURNS; turn += 1) {
-  const serialized = thread.serializeForLLM();
+const runTs = new Date().toISOString().replace(/[:.]/g, "-");
+const slug = message.slice(0, 50).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "run";
+const runDir = `.runs/${runTs}-${slug}`;
+mkdirSync(runDir, { recursive: true });
 
+for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   let doneMessage: string | null = null;
 
   const { session, modelFallbackMessage } = await createAgentSession({
@@ -269,11 +273,13 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   });
 
   try {
-    await session.prompt(serialized);
+    await session.prompt(thread.serializeForLLM());
   } finally {
     unsubscribe();
     session.dispose();
   }
+
+  writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
 
   if (doneMessage !== null) {
     console.log(doneMessage);
