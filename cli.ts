@@ -134,6 +134,10 @@ function createDoneForNowTool(
 const DESTRUCTIVE_PATTERNS = [
   /workflows\/.*\/tools\/docs\.write\/run/,
   /workflows\/.*\/tools\/drive\.copy\/run/,
+  /workflows\/.*\/tools\/apollo\.contact\.bulkCreate\/run/,
+  /workflows\/.*\/tools\/apollo\.contact\.bulkUpdate\/run/,
+  /workflows\/.*\/tools\/apollo\.account\.bulkCreate\/run/,
+  /workflows\/.*\/tools\/apollo\.field\.create\/run/,
 ];
 
 function withApprovalGate(

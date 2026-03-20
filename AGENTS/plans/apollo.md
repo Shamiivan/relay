@@ -186,45 +186,45 @@ Run after each slice:
 
 - [x] add `apollo.search_companies`
 - [x] add `apollo.search_people`
-- [ ] add `apollo.organization.search`
-- [ ] add `apollo.organization.topPeople`
-- [ ] add `apollo.organization.jobPostings`
-- [ ] add missing workflow shims for all search tools
-- [ ] add tool tests
-- [ ] run typecheck and search test suite
+- [x] add `apollo.organization.search`
+- [x] add `apollo.organization.topPeople`
+- [x] add `apollo.organization.jobPostings`
+- [x] add missing workflow shims for all search tools
+- [x] add tool tests
+- [x] run typecheck and search test suite
 
 ### Slice B: Read And Match
 
-- [ ] add `apollo.person.show`
-- [ ] add `apollo.person.match`
-- [ ] add `apollo.person.bulkMatch`
-- [ ] add `apollo.organization.show`
-- [ ] add workflow shims
-- [ ] add tool tests
-- [ ] run typecheck and read/match test suite
+- [x] add `apollo.person.show`
+- [x] add `apollo.person.match`
+- [x] add `apollo.person.bulkMatch`
+- [x] add `apollo.organization.show`
+- [x] add workflow shims
+- [x] add tool tests
+- [x] run typecheck and read/match test suite
 
 ### Slice C: Organization Enrichment
 
-- [ ] add `apollo.organization.enrich`
-- [ ] add `apollo.organization.bulkEnrich`
-- [ ] add workflow shims
-- [ ] add tool tests
-- [ ] run typecheck and enrichment test suite
+- [x] add `apollo.organization.enrich`
+- [x] add `apollo.organization.bulkEnrich`
+- [x] add workflow shims
+- [x] add tool tests
+- [x] run typecheck and enrichment test suite
 
 ### Slice D: CRM Sync
 
-- [ ] add `apollo.contact.bulkCreate`
-- [ ] add `apollo.contact.bulkUpdate`
-- [ ] add `apollo.account.bulkCreate`
-- [ ] mark mutating tools destructive
-- [ ] add workflow shims
-- [ ] add tool tests
-- [ ] run typecheck and CRM sync test suite
+- [x] add `apollo.contact.bulkCreate`
+- [x] add `apollo.contact.bulkUpdate`
+- [x] add `apollo.account.bulkCreate`
+- [x] mark mutating tools destructive
+- [x] add workflow shims
+- [x] add tool tests
+- [x] run typecheck and CRM sync test suite
 
 ### Slice E: Reporting And Metadata
 
-- [ ] add `apollo.report.sync`
-- [ ] add `apollo.field.create`
-- [ ] add workflow shims
-- [ ] add tool tests
-- [ ] run typecheck and utility test suite
+- [x] add `apollo.report.sync`
+- [x] add `apollo.field.create`
+- [x] add workflow shims
+- [x] add tool tests
+- [x] run typecheck and utility test suite
