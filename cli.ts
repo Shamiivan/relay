@@ -55,7 +55,7 @@ function formatEventShort(event: ThreadEvent): string {
     default: return `[${event.type}]`;
   }
 }
-const MAX_TURNS = 20;
+const MAX_TURNS = 50;
 
 function createMinimalResourceLoader(): ResourceLoader {
   return {
