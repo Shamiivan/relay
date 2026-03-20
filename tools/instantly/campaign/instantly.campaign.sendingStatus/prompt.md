@@ -24,7 +24,12 @@ Examples:
 {"campaignId":"019c0e38-c5be-70d5-b730-fdd27bea4548","withAiSummary":true}
 ```
 
+```json
+{"campaignId":"efccfc78-5cc8-45cf-82cd-c3671fc51d3a","withAiSummary":false}
+```
+
 Typical use cases:
 - explain why a campaign is not sending
 - inspect operational health before changing schedule or accounts
 - pull a human-readable summary for support/debugging
+- verify campaign health after activating or resuming it

@@ -22,8 +22,13 @@ Examples:
 {"campaignId":"019c0e38-c5be-70d5-b730-fdd27bea4548","variables":["firstName","companyName","painPoint"]}
 ```
 
+```json
+{"campaignId":"efccfc78-5cc8-45cf-82cd-c3671fc51d3a","variables":["caseStudy","competitor","roleFocus"]}
+```
+
 Typical use cases:
 - add merge tags before importing leads
 - standardize variables needed by sequence copy
+- prepare campaign templates for more personalized copy
 
 This writes state.

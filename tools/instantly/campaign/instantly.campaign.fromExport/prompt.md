@@ -17,8 +17,13 @@ Examples:
 {"campaignId":"019c0e38-c5be-70d5-b730-fdd27bea4548"}
 ```
 
+```json
+{"campaignId":"efccfc78-5cc8-45cf-82cd-c3671fc51d3a"}
+```
+
 Typical use cases:
 - import a shared campaign into a workspace
 - recreate a campaign from an exported/shared source
+- pull a template campaign into another environment
 
 This writes state.

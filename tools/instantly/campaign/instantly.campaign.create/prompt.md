@@ -49,9 +49,53 @@ Examples:
 }
 ```
 
+```json
+{
+  "name": "Founder Led Outreach",
+  "campaign_schedule": {
+    "schedules": [
+      {
+        "name": "Morning Window",
+        "timing": { "from": "08:30", "to": "11:30" },
+        "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
+      }
+    ]
+  },
+  "email_list": ["founder@example.com"],
+  "text_only": true,
+  "first_email_text_only": true,
+  "daily_limit": 25,
+  "open_tracking": false,
+  "link_tracking": false
+}
+```
+
+```json
+{
+  "name": "Enterprise SDR Motion",
+  "campaign_schedule": {
+    "timezone": "America/New_York",
+    "schedules": [
+      {
+        "name": "Business Hours",
+        "timing": { "from": "10:00", "to": "16:00" },
+        "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
+      }
+    ]
+  },
+  "email_list": ["sdr1@example.com", "sdr2@example.com"],
+  "daily_limit": 120,
+  "stop_on_reply": true,
+  "stop_on_auto_reply": true,
+  "daily_max_leads": 40
+}
+```
+
 Typical use cases:
 - create a new outbound campaign
 - create a draft campaign before adding leads
 - create a campaign with specific sending controls
+- create a text-only founder campaign
+- create a multi-sender SDR campaign
 
 This writes data.

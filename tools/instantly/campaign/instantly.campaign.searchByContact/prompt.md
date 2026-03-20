@@ -20,6 +20,15 @@ Examples:
 {"leadEmail":"ada@example.com","limit":10}
 ```
 
+```json
+{"leadEmail":"prospect@acme.com","limit":5}
+```
+
+```json
+{"leadEmail":"ada@example.com","startingAfter":"campaign-cursor-1","limit":10}
+```
+
 Typical use cases:
 - determine which campaigns a prospect is in
 - audit whether a lead was already added to an outreach motion
+- support deduplication or conflict checks before adding a lead again

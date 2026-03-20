@@ -17,6 +17,11 @@ Examples:
 {}
 ```
 
+```json
+{}
+```
+
 Typical use cases:
 - check whether a workspace has active launched campaigns
 - smoke-test Instantly credentials with a non-destructive read
+- compare a workspace before and after campaign launch setup

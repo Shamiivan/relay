@@ -35,8 +35,21 @@ Examples:
 {"tagIds":["tag-1","tag-2"],"limit":25}
 ```
 
+```json
+{"aiSdrId":"019c0e38-c5be-70d5-b730-fdd27bea4548","limit":10}
+```
+
+```json
+{"search":"enterprise","status":2,"limit":20}
+```
+
+```json
+{"startingAfter":"efccfc78-5cc8-45cf-82cd-c3671fc51d3a","limit":10}
+```
+
 Typical use cases:
 - find a campaign ID by name
 - list paused campaigns
 - paginate through campaigns in a large workspace
 - filter campaigns tied to a specific AI SDR
+- narrow to active campaigns matching a naming convention
