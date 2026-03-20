@@ -3,82 +3,53 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { execSync } from "node:child_process";
 import { config } from "dotenv";
+import { Type } from "@sinclair/typebox";
 import {
   createAgentSession,
   createBashTool,
   createExtensionRuntime,
   SessionManager,
   type ResourceLoader,
+  type ToolDefinition,
 } from "./pi-mono/packages/coding-agent/src/index.ts";
 import { Thread } from "./runtime/src/thread.ts";
+import type { ThreadEvent } from "./runtime/src/thread.ts";
 
 config({ path: new URL(".env.local", import.meta.url).pathname });
 
-type NextStep =
-  | { intent: "request_more_information"; message: string }
-  | { intent: "done_for_now"; message: string };
+const CONTRACT = `You are a workflow agent. Your ONLY output mechanism is tool calls — never respond with plain text.
 
-const CONTRACT = `You are a workflow agent with a bash tool.
-
-The full conversation history is in XML tags above.
-
-You have access to workflow tools on disk under \`workflows/\`.
+Tools:
+- bash: discover and run workflow tools under workflows/
+- ask_human: ask the user for clarification when their request is ambiguous
+- done_for_now: deliver your final answer — ALWAYS call this to complete the task
 
 Rules:
-- First inspect the available workflows using bash
-- Then choose the workflow and tool that best match the request
-- Read the workflow README or tool README if needed
-- Run the tool by piping JSON into its \`run\` script
-- NEVER answer from memory or general knowledge
-- Base your answer entirely on tool output
+- NEVER respond with plain text. Every turn MUST end with a tool call.
+- To answer the user: run a workflow tool via bash, then call done_for_now with the result.
+- If tool results are already in the conversation, call done_for_now immediately.
+- done_for_now is the ONLY way to complete the task.
 
-Helpful commands:
-- Inspect available workflows:
-  tree workflows
-- Read a workflow README:
-  cat workflows/<workflow>/README.md
-- Read a tool README:
-  cat workflows/<workflow>/tools/<tool>/README.md
-- Run a tool:
-  printf '<json>' | workflows/<workflow>/tools/<tool>/run
-
-Examples:
-
-Example 1: Generic web research
-User: "What are top agency pain points?"
-Good behavior:
-1. Run:
-   tree workflows
-2. Choose the generic web workflow unless the user explicitly asks for a sales-specific workflow
-3. Read the tool README if needed:
-   cat workflows/public_web_search/tools/web.search/README.md
-4. Run:
-   printf '{"query":"top agency pain points","count":5}' | workflows/public_web_search/tools/web.search/run
-5. Return only:
-   {"intent":"done_for_now","message":"<answer grounded in the tool output>"}
-
-Example 2: Need clarification
-User: "Research Acme for outreach"
-Good behavior:
-1. Run:
-   tree workflows
-2. If the request is ambiguous, return only:
-   {"intent":"request_more_information","message":"What kind of outreach do you want: sales prospecting, partnership outreach, or something else?"}
-
-Example 3: Invalid behavior
-User: "What are top agency pain points?"
-Bad behavior:
-- Do not answer from memory
-- Do not skip the tool call
-- Do not return:
-  {"intent":"done_for_now","message":"Based on my research..."}
-  unless you actually ran a workflow tool
-
-Output ONLY one of these when done (no markdown, no surrounding text):
-{"intent":"request_more_information","message":"<question>"}
-{"intent":"done_for_now","message":"<answer from tool output>"}`;
+Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run`;
 
 const DEBUG_THREAD = process.env.DEBUG_THREAD === "1";
+
+function formatEventShort(event: ThreadEvent): string {
+  switch (event.type) {
+    case "user_message": return `[user] ${event.data}`;
+    case "assistant_message": return `[assistant] ${event.data}`;
+    case "model_response": return `[done] ${event.data.slice(0, 120)}${event.data.length > 120 ? "…" : ""}`;
+    case "system_note": return `[note] ${event.data.slice(0, 120)}${event.data.length > 120 ? "…" : ""}`;
+    case "human_response": return `[human] ${event.data}`;
+    case "request_human_clarification": return `[ask] ${event.data.prompt}`;
+    case "executable_call": return `[bash] ${String(event.data.args).slice(0, 120)}`;
+    case "executable_result": {
+      const r = String(event.data.result);
+      return `[result] ${r.slice(0, 200)}${r.length > 200 ? "…" : ""}`;
+    }
+    default: return `[${event.type}]`;
+  }
+}
 const MAX_TURNS = 20;
 
 function createMinimalResourceLoader(): ResourceLoader {
@@ -105,20 +76,57 @@ async function askHuman(question: string): Promise<string> {
   }
 }
 
-function parseNextStep(raw: string): NextStep {
-  const normalized = raw.trim();
-  const fencedMatch = normalized.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const jsonText = fencedMatch?.[1]?.trim() ?? normalized;
-  const objectMatch = jsonText.match(/\{[\s\S]*\}/);
-  const candidate = objectMatch?.[0] ?? jsonText;
-  const parsed = JSON.parse(candidate) as Partial<NextStep>;
-  if (parsed.intent !== "request_more_information" && parsed.intent !== "done_for_now") {
-    throw new Error(`Invalid intent in model response: ${raw}`);
-  }
-  if (typeof parsed.message !== "string" || parsed.message.trim().length === 0) {
-    throw new Error(`Invalid message in model response: ${raw}`);
-  }
-  return { intent: parsed.intent, message: parsed.message } as NextStep;
+function createAskHumanTool(thread: Thread, ask: (q: string) => Promise<string>): ToolDefinition {
+  return {
+    name: "ask_human",
+    label: "Ask Human",
+    description:
+      "Ask the user a clarifying question when the request is ambiguous. " +
+      "The user's answer will be returned as the tool result. " +
+      "Do NOT use this to get permission to run tools.",
+    parameters: Type.Object({
+      question: Type.String({ description: "The question to ask the user" }),
+    }),
+    execute: async (_toolCallId: string, params: { question: string }) => {
+      thread.append({ type: "request_human_clarification", data: { prompt: params.question } });
+      const answer = await ask(params.question);
+      thread.append({ type: "human_response", data: answer });
+      return { content: [{ type: "text", text: answer }] };
+    },
+  };
+}
+
+function createDoneForNowTool(
+  thread: Thread,
+  onDone: (message: string) => void,
+  abort: () => void,
+  getWorkflowToolCalled: () => boolean,
+): ToolDefinition {
+  let called = false;
+  return {
+    name: "done_for_now",
+    label: "Done",
+    description:
+      "Call this with the final answer when the task is complete. " +
+      "Only call after running at least one workflow tool (workflows/.../run) via bash. " +
+      "Do not call from memory or after only running discovery commands.",
+    parameters: Type.Object({
+      message: Type.String({ description: "The final answer to return to the user" }),
+    }),
+    execute: async (_toolCallId: string, params: { message: string }) => {
+      if (!getWorkflowToolCalled()) {
+        const msg = "ERROR: You must run a workflow tool (workflows/.../tools/.../run) via bash before calling done_for_now. Run the appropriate tool first.";
+        thread.append({ type: "system_note", data: msg });
+        return { content: [{ type: "text", text: msg }] };
+      }
+      if (called) return { content: [{ type: "text", text: "Already done." }] };
+      called = true;
+      thread.append({ type: "model_response", data: params.message });
+      onDone(params.message);
+      abort();
+      return { content: [{ type: "text", text: "Answer delivered." }] };
+    },
+  };
 }
 
 // Commands matching these patterns require human approval before running
@@ -202,20 +210,37 @@ const thread = new Thread({
   ],
 });
 
+// Patch append to log every event as it lands
+const _append = thread.append.bind(thread);
+thread.append = (event: ThreadEvent) => {
+  _append(event);
+  if (DEBUG_THREAD) {
+    console.error(thread.serializeForLLM());
+  } else {
+    console.error(formatEventShort(event));
+  }
+};
+
 let completed = false;
+let workflowToolCalled = false;
 
 for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   const serialized = thread.serializeForLLM();
 
-  if (DEBUG_THREAD) {
-    console.error("\n[thread.serializeForLLM()]");
-    console.error(serialized);
-    console.error();
-  }
+  let doneMessage: string | null = null;
 
   const { session, modelFallbackMessage } = await createAgentSession({
     resourceLoader,
     tools: [withApprovalGate(createBashTool(process.cwd()), askHuman)],
+    customTools: [
+      createAskHumanTool(thread, askHuman),
+      createDoneForNowTool(
+        thread,
+        (msg) => { doneMessage = msg; },
+        () => { session.abort(); },
+        () => workflowToolCalled,
+      ),
+    ],
     sessionManager: SessionManager.inMemory(),
   });
 
@@ -223,27 +248,23 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     console.error(modelFallbackMessage);
   }
 
-  let responseText = "";
-  let bashCallCount = 0;
-
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "tool_execution_start" && event.toolName === "bash") {
-      bashCallCount += 1;
       const command = typeof event.args === "object" && event.args !== null && "command" in event.args
         ? String((event.args as { command: unknown }).command)
         : String(event.args);
+      if (/workflows\/.*\/tools\/.*\/run/.test(command)) {
+        workflowToolCalled = true;
+      }
       thread.append({ type: "executable_call", data: { executableName: "bash", args: command } });
     }
 
     if (event.type === "tool_execution_end" && event.toolName === "bash") {
+      const result = extractResultText(event.result);
       thread.append({
         type: "executable_result",
-        data: { executableName: "bash", result: extractResultText(event.result) },
+        data: { executableName: "bash", result: result },
       });
-    }
-
-    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-      responseText += event.assistantMessageEvent.delta;
     }
   });
 
@@ -254,47 +275,10 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     session.dispose();
   }
 
-  if (DEBUG_THREAD) {
-    console.error("\n[rawModelResponse]");
-    console.error(responseText.trim());
-    console.error();
-  }
-
-  const trimmed = responseText.trim();
-  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
-  const reasoning = jsonMatch ? trimmed.slice(0, trimmed.indexOf(jsonMatch[0])).trim() : "";
-  if (reasoning) thread.append({ type: "assistant_message", data: reasoning });
-  thread.append({ type: "model_response", data: jsonMatch?.[0] ?? trimmed });
-
-  let nextStep: NextStep;
-  try {
-    nextStep = parseNextStep(trimmed);
-  } catch {
-    thread.append({
-      type: "system_note",
-      data: `Your last response was not valid JSON. You must respond with exactly one of these shapes:\n{"intent":"request_more_information","message":"<question for the user>"}\n{"intent":"done_for_now","message":"<final answer>"}`,
-    });
-    continue;
-  }
-
-  if (nextStep.intent === "done_for_now") {
-    const hasHumanTurn = thread.events.some((e) => e.type === "human_response");
-    if (bashCallCount === 0 && hasHumanTurn) {
-      thread.append({
-        type: "system_note",
-        data: "You answered without running any tools. You MUST run at least one workflow tool before responding with done_for_now. Use bash to call the appropriate tool and base your answer on its output.",
-      });
-      continue;
-    }
-    console.log(nextStep.message);
+  if (doneMessage !== null) {
+    console.log(doneMessage);
     completed = true;
     break;
-  }
-
-  if (nextStep.intent === "request_more_information") {
-    const humanAnswer = await askHuman(nextStep.message);
-    thread.append({ type: "human_response", data: humanAnswer });
-    continue;
   }
 }
 
