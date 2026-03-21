@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-email-campaign-apollo-search-companies",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}

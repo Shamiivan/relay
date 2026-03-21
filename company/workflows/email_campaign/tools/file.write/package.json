@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-email-campaign-file-write",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}

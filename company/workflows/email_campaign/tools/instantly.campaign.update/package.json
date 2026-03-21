@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-email-campaign-instantly-campaign-update",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}
