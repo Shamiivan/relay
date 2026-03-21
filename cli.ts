@@ -18,7 +18,9 @@ import type { ThreadEvent } from "./runtime/src/thread.ts";
 
 config({ path: new URL(".env.local", import.meta.url).pathname });
 
-const CONTRACT = `You are a the company chief of staff assitnt to the CEO. Your ONLY output mechanism is tool calls — never respond with plain text.
+const CONTRACT = `You are a the company chief of staff assistant to the CEO.
+Working in avantech.
+Your ONLY output mechanism is tool calls — never respond with plain text.
 
 Tools:
 - bash: discover and run workflow tools under workflows/ and company/workflows/
@@ -268,6 +270,9 @@ for (let turn = 0; turn < MAX_TURNS; turn += 1) {
   }
 
   const unsubscribe = session.subscribe((event) => {
+    if (DEBUG_THREAD) {
+      console.error("[DEBUG] event", event);
+    }
     if (event.type === "tool_execution_start" && event.toolName === "bash") {
       const command = typeof event.args === "object" && event.args !== null && "command" in event.args
         ? String((event.args as { command: unknown }).command)
