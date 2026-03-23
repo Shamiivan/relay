@@ -8,7 +8,6 @@ Arguments:
 - `page`: 1-based result page
 - `perPage`: number of companies to return
 - `keywords`: free-text company search string
-- `industries`: industry keywords folded into search
 - `industryTagIds`: Apollo industry tag IDs for precise filtering
 - `locations`: company headquarter locations
 - `employeeCountMin`: minimum employee count
@@ -25,6 +24,7 @@ Notes:
 - This is the preferred org-search tool for sales-agency prospecting.
 - It normalizes Apollo's response so the agent can reason over account lists without reading raw payloads.
 - For advanced tuning, pass native Apollo fields under `body`. Relay will merge your `body` with the convenience filters above.
+- Do not pass free-text industry names. Use `industryTagIds` or raw `body.organization_industry_tag_ids`.
 
 Example:
 ```json
@@ -64,6 +64,17 @@ Example: use advanced native Apollo tuning under `body`
     "sort_by_field": "employee_count",
     "sort_ascending": false
   },
+  "perPage": 10
+}
+```
+
+Example: exact industry filtering
+```json
+{
+  "industryTagIds": ["5567cd4773696439b10b0000"],
+  "locations": ["United States"],
+  "employeeCountMin": 11,
+  "employeeCountMax": 200,
   "perPage": 10
 }
 ```

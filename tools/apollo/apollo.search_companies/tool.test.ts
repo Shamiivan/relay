@@ -17,7 +17,6 @@ test("searchApolloCompanies maps Apollo companies into the tool output shape", a
       page: 2,
       perPage: 2,
       keywords: "developer tools",
-      industries: ["software", "saas"],
       industryTagIds: ["5567cd4773696439b10b0000"],
       locations: ["Toronto, Canada"],
       employeeCountMin: 11,
@@ -70,7 +69,7 @@ test("searchApolloCompanies maps Apollo companies into the tool output shape", a
   assert.deepEqual(JSON.parse(capturedBody), {
     page: 2,
     per_page: 2,
-    q_keywords: "developer tools software saas",
+    q_keywords: "developer tools",
     organization_locations: ["Toronto, Canada"],
     organization_num_employees_ranges: ["11,200"],
     organization_industry_tag_ids: ["5567cd4773696439b10b0000"],
@@ -138,6 +137,44 @@ test("searchApolloCompanies normalizes website URLs into domains and keeps empty
   });
 });
 
+test("searchApolloCompanies allows exact industry tag filtering without free-text keywords", async () => {
+  let capturedBody = "";
+
+  await searchApolloCompanies(
+    {
+      industryTagIds: ["5567cd49736964541d010000"],
+      page: 1,
+      perPage: 5,
+    },
+    {
+      env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        capturedBody = String(init?.body ?? "");
+        return {
+          ok: true,
+          status: 200,
+          headers: { get() { return null; } },
+          async text() {
+            return "";
+          },
+          async json() {
+            return {
+              organizations: [],
+              total_entries: 0,
+            };
+          },
+        };
+      },
+    },
+  );
+
+  assert.deepEqual(JSON.parse(capturedBody), {
+    page: 1,
+    per_page: 5,
+    organization_industry_tag_ids: ["5567cd49736964541d010000"],
+  });
+});
+
 test("searchApolloCompanies surfaces auth and rate limit statuses distinctly", async () => {
   await assert.rejects(
     searchApolloCompanies(
@@ -189,6 +226,23 @@ test("searchApolloCompanies rejects invalid employee range input before hitting 
       },
     ),
     z.ZodError,
+  );
+});
+
+test("searchApolloCompanies rejects free-text industries without exact Apollo tag IDs", async () => {
+  await assert.rejects(
+    searchApolloCompanies(
+      { industries: ["staffing"] },
+      {
+        env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
+        fetchImpl: async () => {
+          throw new Error("fetch should not run for unsupported industry filtering");
+        },
+      },
+    ),
+    (error: unknown) =>
+      error instanceof z.ZodError
+      && error.issues.some((issue) => issue.message.includes("industryTagIds")),
   );
 });
 

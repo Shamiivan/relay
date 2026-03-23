@@ -126,3 +126,27 @@ test("workflow shim resolves to the same tool contract the agent will call", {
     },
   });
 });
+
+test("tool executable returns a validation envelope for unsupported free-text industry filtering", {
+  skip: !subprocessExecutionAvailable,
+}, async () => {
+  const result = await runJsonTool(
+    process.execPath,
+    ["--import", tsxLoaderPath, toolPath],
+    { industries: ["staffing"], perPage: 1 },
+    {
+      ...process.env,
+      APOLLO_API_KEY: "test-key",
+    },
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(JSON.parse(result.stdout), {
+    ok: false,
+    error: {
+      type: "validation",
+      message: "industries is not a precise Apollo filter; use industryTagIds instead",
+    },
+  });
+});

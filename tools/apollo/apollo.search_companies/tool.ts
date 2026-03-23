@@ -15,7 +15,7 @@ const inputSchema = z.object({
     "Free-text keywords to match against companies.",
   ),
   industries: z.array(z.string().min(1)).max(20).optional().describe(
-    "Industry keywords to bias company matching when exact Apollo industry tag IDs are not available.",
+    "Deprecated free-text industry hints. Use industryTagIds for real Apollo industry filtering.",
   ),
   industryTagIds: z.array(z.string().min(1)).max(50).optional().describe(
     "Apollo industry tag IDs for precise industry filtering.",
@@ -35,15 +35,27 @@ const inputSchema = z.object({
   body: z.object({}).passthrough().optional().describe(
     "Additional native Apollo mixed_companies/search request fields for advanced tuning.",
   ),
-}).refine(
-  (value) => value.employeeCountMin === undefined
-    || value.employeeCountMax === undefined
-    || value.employeeCountMin <= value.employeeCountMax,
-  {
-    message: "employeeCountMin must be less than or equal to employeeCountMax",
-    path: ["employeeCountMin"],
-  },
-);
+}).superRefine((value, ctx) => {
+  if (
+    value.employeeCountMin !== undefined
+    && value.employeeCountMax !== undefined
+    && value.employeeCountMin > value.employeeCountMax
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "employeeCountMin must be less than or equal to employeeCountMax",
+      path: ["employeeCountMin"],
+    });
+  }
+
+  if ((value.industries?.length ?? 0) > 0 && (value.industryTagIds?.length ?? 0) === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "industries is not a precise Apollo filter; use industryTagIds instead",
+      path: ["industries"],
+    });
+  }
+});
 
 const companySchema = z.object({
   id: z.string(),
@@ -82,17 +94,11 @@ function toEmployeeRanges(input: z.output<typeof inputSchema>): string[] | undef
 }
 
 function combineKeywords(input: z.output<typeof inputSchema>): string | undefined {
-  const values = [
-    input.keywords,
-    ...(input.industries ?? []),
-  ].filter((value): value is string => Boolean(value?.trim()))
-    .map((value) => value.trim());
-
-  if (values.length === 0) {
+  const value = input.keywords?.trim();
+  if (!value) {
     return undefined;
   }
-
-  return values.join(" ");
+  return value;
 }
 
 function normalizeDomain(company: z.output<typeof companySchema>): string | null {
