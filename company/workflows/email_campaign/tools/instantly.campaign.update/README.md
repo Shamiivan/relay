@@ -33,10 +33,11 @@ Schedule patch example:
 printf '%s\n' '{
   "campaignId": "019c0e38-c5be-70d5-b730-fdd27bea4548",
   "campaign_schedule": {
-    "timezone": "America/Los_Angeles",
+    "timezone": "America/Chicago",
     "schedules": [
       {
         "name": "West Coast Hours",
+        "timezone": "America/Chicago",
         "timing": { "from": "09:00", "to": "15:00" },
         "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
       }
@@ -55,3 +56,7 @@ printf '%s\n' '{
   "stop_on_auto_reply": true
 }' | company/workflows/email_campaign/tools/instantly.campaign.update/run
 ```
+
+Notes:
+- The live Instantly API requires `campaign_schedule.schedules[].timezone`.
+- A top-level `campaign_schedule.timezone` is not enough by itself.

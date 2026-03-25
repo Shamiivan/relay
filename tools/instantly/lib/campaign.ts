@@ -1,5 +1,116 @@
 import { z } from "zod";
 
+// Source: Instantly official Campaign schema docs (2026-03-23).
+const instantlyCampaignScheduleTimezones = new Set([
+  "Etc/GMT+12",
+  "Etc/GMT+11",
+  "Etc/GMT+10",
+  "America/Anchorage",
+  "America/Dawson",
+  "America/Creston",
+  "America/Chihuahua",
+  "America/Boise",
+  "America/Belize",
+  "America/Chicago",
+  "America/Bahia_Banderas",
+  "America/Regina",
+  "America/Bogota",
+  "America/Detroit",
+  "America/Indiana/Marengo",
+  "America/Caracas",
+  "America/Asuncion",
+  "America/Glace_Bay",
+  "America/Campo_Grande",
+  "America/Anguilla",
+  "America/Santiago",
+  "America/St_Johns",
+  "America/Sao_Paulo",
+  "America/Argentina/La_Rioja",
+  "America/Araguaina",
+  "America/Godthab",
+  "America/Montevideo",
+  "America/Bahia",
+  "America/Noronha",
+  "America/Scoresbysund",
+  "Atlantic/Cape_Verde",
+  "Africa/Casablanca",
+  "America/Danmarkshavn",
+  "Europe/Isle_of_Man",
+  "Atlantic/Canary",
+  "Africa/Abidjan",
+  "Arctic/Longyearbyen",
+  "Europe/Belgrade",
+  "Africa/Ceuta",
+  "Europe/Sarajevo",
+  "Africa/Algiers",
+  "Africa/Windhoek",
+  "Asia/Nicosia",
+  "Asia/Beirut",
+  "Africa/Cairo",
+  "Asia/Damascus",
+  "Europe/Bucharest",
+  "Africa/Blantyre",
+  "Europe/Helsinki",
+  "Europe/Istanbul",
+  "Asia/Jerusalem",
+  "Africa/Tripoli",
+  "Asia/Amman",
+  "Asia/Baghdad",
+  "Europe/Kaliningrad",
+  "Asia/Aden",
+  "Africa/Addis_Ababa",
+  "Europe/Kirov",
+  "Europe/Astrakhan",
+  "Asia/Tehran",
+  "Asia/Dubai",
+  "Asia/Baku",
+  "Indian/Mahe",
+  "Asia/Tbilisi",
+  "Asia/Yerevan",
+  "Asia/Kabul",
+  "Antarctica/Mawson",
+  "Asia/Yekaterinburg",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Colombo",
+  "Asia/Kathmandu",
+  "Antarctica/Vostok",
+  "Asia/Dhaka",
+  "Asia/Rangoon",
+  "Antarctica/Davis",
+  "Asia/Novokuznetsk",
+  "Asia/Hong_Kong",
+  "Asia/Krasnoyarsk",
+  "Asia/Brunei",
+  "Australia/Perth",
+  "Asia/Taipei",
+  "Asia/Choibalsan",
+  "Asia/Irkutsk",
+  "Asia/Dili",
+  "Asia/Pyongyang",
+  "Australia/Adelaide",
+  "Australia/Darwin",
+  "Australia/Brisbane",
+  "Australia/Melbourne",
+  "Antarctica/DumontDUrville",
+  "Australia/Currie",
+  "Asia/Chita",
+  "Antarctica/Macquarie",
+  "Asia/Sakhalin",
+  "Pacific/Auckland",
+  "Etc/GMT-12",
+  "Pacific/Fiji",
+  "Asia/Anadyr",
+  "Asia/Kamchatka",
+  "Etc/GMT-13",
+  "Pacific/Apia",
+]);
+
+const timezoneSchema = z.string().trim().min(1).refine(
+  (value) => instantlyCampaignScheduleTimezones.has(value),
+  "Use an Instantly-supported campaign timezone value.",
+);
+
 const timingSchema = z.object({
   from: z.string().regex(/^([01][0-9]|2[0-3]):([0-5][0-9])$/),
   to: z.string().regex(/^([01][0-9]|2[0-3]):([0-5][0-9])$/),
@@ -17,16 +128,34 @@ const scheduleDaySchema = z.object({
 
 const campaignScheduleItemSchema = z.object({
   name: z.string().min(1),
+  timezone: timezoneSchema.optional(),
   timing: timingSchema,
   days: scheduleDaySchema,
 }).passthrough();
 
 export const campaignScheduleSchema = z.object({
   schedules: z.array(campaignScheduleItemSchema).min(1),
-  timezone: z.string().optional(),
+  timezone: timezoneSchema.optional(),
   start_date: z.string().optional(),
   end_date: z.string().nullable().optional(),
-}).passthrough();
+}).passthrough().superRefine((value, ctx) => {
+  value.schedules.forEach((schedule, index) => {
+    if (!schedule.timezone && !value.timezone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Each campaign schedule entry needs a timezone.",
+        path: ["schedules", index, "timezone"],
+      });
+    }
+  });
+}).transform(({ timezone, schedules, ...rest }) => ({
+  ...rest,
+  ...(timezone ? { timezone } : {}),
+  schedules: schedules.map((schedule) => ({
+    ...schedule,
+    timezone: schedule.timezone ?? timezone!,
+  })),
+}));
 
 export const campaignMutableFieldsSchema = z.object({
   name: z.string().min(1).optional(),

@@ -12,6 +12,7 @@ Arguments:
 - common fields:
 - `name`
 - `campaign_schedule`
+- each `campaign_schedule.schedules[]` entry needs its own `timezone`
 - `sequences`
 - `email_list`
 - `daily_limit`
@@ -42,10 +43,11 @@ Examples:
 {
   "campaignId":"019c0e38-c5be-70d5-b730-fdd27bea4548",
   "campaign_schedule": {
-    "timezone": "America/Los_Angeles",
+    "timezone": "America/Chicago",
     "schedules": [
       {
         "name": "West Coast Hours",
+        "timezone": "America/Chicago",
         "timing": { "from": "09:00", "to": "15:00" },
         "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
       }
@@ -68,5 +70,10 @@ Typical use cases:
 - change sending limits or tracking settings
 - patch scheduling or ownership without rebuilding the campaign
 - rotate senders or adjust schedule windows
+
+Notes:
+- The live Instantly API validates `timezone` on each schedule item, not just at the top of `campaign_schedule`.
+- Relay validates Instantly's documented timezone allowlist locally before sending campaign schedule changes.
+- Use an Instantly-supported timezone value such as `America/Chicago` for schedule updates.
 
 This writes data.

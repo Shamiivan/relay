@@ -22,10 +22,10 @@ Use only after the draft copy and settings are approved.
 printf '%s\n' '{
   "name": "Immediate Billing - Ops Managers - NA",
   "campaign_schedule": {
-    "timezone": "America/Toronto",
     "schedules": [
       {
         "name": "Weekdays",
+        "timezone": "America/Chicago",
         "timing": { "from": "09:00", "to": "17:00" },
         "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
       }
@@ -47,10 +47,11 @@ Multi-sender example:
 printf '%s\n' '{
   "name": "Immediate Billing - Founder Led",
   "campaign_schedule": {
-    "timezone": "America/New_York",
+    "timezone": "America/Chicago",
     "schedules": [
       {
         "name": "Morning Window",
+        "timezone": "America/Chicago",
         "timing": { "from": "08:30", "to": "11:30" },
         "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
       }
@@ -62,4 +63,40 @@ printf '%s\n' '{
   "stop_on_reply": true,
   "stop_on_auto_reply": true
 }' | company/workflows/email_campaign/tools/instantly.campaign.create/run
+```
+
+Notes:
+- The live Instantly API requires `campaign_schedule.schedules[].timezone`.
+- Keeping a top-level `campaign_schedule.timezone` is optional in Relay and is only used as a legacy fallback for filling missing schedule timezones.
+- Use an Instantly-supported timezone value. `America/Chicago` is confirmed by the current Instantly API docs.
+
+Verified command:
+
+```bash
+printf '%s\n' '{
+  "name": "Hiring Angle - Draft",
+  "campaign_schedule": {
+    "schedules": [
+      {
+        "name": "Weekdays",
+        "timezone": "America/Chicago",
+        "timing": { "from": "09:00", "to": "17:00" },
+        "days": { "1": true, "2": true, "3": true, "4": true, "5": true }
+      }
+    ]
+  },
+  "email_list": ["ivan@teamavantechlabs.com"],
+  "daily_limit": 30,
+  "stop_on_reply": true,
+  "text_only": true,
+  "first_email_text_only": true,
+  "open_tracking": false,
+  "link_tracking": false
+}' | company/workflows/email_campaign/tools/instantly.campaign.create/run
+```
+
+Verified result on 2026-03-23:
+
+```json
+{"ok":true,"result":{"campaign":{"id":"1934d4bb-0d46-47fb-8ade-a6eeb32ca8be","name":"Hiring Angle - Draft","status":0,"timestampCreated":"2026-03-23T18:17:44.216Z","timestampUpdated":"2026-03-23T18:17:44.216Z"}}}
 ```
