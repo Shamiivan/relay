@@ -128,3 +128,47 @@ test("workflow shim resolves to the same tool contract the agent will call", {
     },
   });
 });
+
+test("tool works with general people filters without known organization IDs", {
+  skip: !subprocessExecutionAvailable,
+}, async () => {
+  const result = await runJsonTool(
+    process.execPath,
+    ["--import", tsxLoaderPath, "--import", fetchMockPath, toolPath],
+    {
+      keywords: "operations automation",
+      titles: ["operations manager"],
+      personLocations: ["Canada"],
+      perPage: 2,
+    },
+    {
+      ...process.env,
+      APOLLO_API_KEY: "test-key",
+      EXPECTED_APOLLO_PEOPLE_KEYWORDS: "operations automation",
+      EXPECTED_APOLLO_PERSON_LOCATIONS: "Canada",
+      EXPECTED_APOLLO_PERSON_TITLE: "operations manager",
+      EXPECTED_APOLLO_PEOPLE_PER_PAGE: "2",
+    },
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(JSON.parse(result.stdout), {
+    ok: true,
+    result: {
+      people: [
+        {
+          id: "person-1",
+          firstName: "Taylor",
+          lastName: "Smith",
+          title: "VP Sales",
+          organizationId: "org-1",
+          organizationName: "Example Corp",
+          hasEmail: true,
+        },
+      ],
+      totalCount: 2,
+      hasMore: false,
+    },
+  });
+});

@@ -1,12 +1,17 @@
-Search Apollo people within specific organizations.
+Search Apollo people across the full dataset so you can find net-new prospects without needing Apollo industry tag IDs or organization inputs.
 
-Run `apollo.search_companies` first when you are still building the target account list. This tool is meant for prospect selection after the organization scope is known.
+Run `apollo.search_people` during discovery to explore titles, locations, seniorities, and departments. Use `apollo.search_companies` afterwards only when you have a concrete account list to normalize.
 
 Do not assume the response includes unlocked email addresses. Use `hasEmail` as availability metadata only.
 
 Arguments:
 - `organizationIds`: Apollo organization IDs to search within
+- `organizationDomains`: company domains to restrict the query to known accounts
+- `organizationLocations`: headquarter locations of organizations to guide the people search
 - `titles`: optional job-title filters
+- `seniorities`: optional seniority filters such as manager, director, or vp
+- `departments`: optional department filters like operations, finance, or marketing
+- `includeSimilarTitles`: allow Apollo to surface titles similar to the ones you specified
 - `personLocations`: optional person-level locations
 - `keywords`: optional free-text people search string
 - `page`: 1-based result page
@@ -19,9 +24,9 @@ Returns:
 - `hasMore`: whether additional pages are available
 
 Notes:
-- This is the preferred person-search tool after target accounts are known.
-- It does not guarantee unlocked email addresses; `hasEmail` only tells you whether Apollo says email is available.
-- For advanced tuning, pass native Apollo fields under `body`. Relay will merge your `body` with the convenience filters above.
+- This is the preferred discovery tool when you are still exploring personas; you can run it before identifying exact organizations or industries.
+- `hasEmail` is metadata only — the endpoint does not unlock email addresses out of the box.
+- Use `body` to reach for any other Apollo filters not exposed above; Relay merges your overrides after the convenience fields.
 
 Example:
 ```json
@@ -30,7 +35,7 @@ Example:
   "titles": ["sales director", "director sales", "director, sales"],
   "personLocations": ["California, US", "Oregon, US", "Washington, US"],
   "body": {
-    "contact_email_status_v2": ["verified"]
+    "contact_email_status": ["verified"]
   },
   "perPage": 5
 }
@@ -57,7 +62,7 @@ Example: prioritize deliverable work emails
   "organizationIds": ["57c4ace7a6da9867ee5599e7"],
   "titles": ["head of growth", "vp marketing"],
   "body": {
-    "contact_email_status_v2": ["verified", "likely_to_engage"],
+    "contact_email_status": ["verified", "likely_to_engage"],
     "person_locations": ["New York, US", "California, US"]
   },
   "perPage": 10

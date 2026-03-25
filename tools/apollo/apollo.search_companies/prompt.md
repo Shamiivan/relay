@@ -1,6 +1,6 @@
 Search Apollo companies that match an ICP or account list filter.
 
-Use this before `apollo.search_people` when you need target organizations first.
+Use this after `apollo.search_people` has helped you define the ICP; the companies tool is best when you already have Apollo identifiers, industries, or explicit domain filters. For net-new discovery, prefer `apollo.search_people` because it lets you reach directly into Apollo's people filters without needing internal industry IDs.
 
 Prefer explicit filters over broad keyword-only queries. If the result set is large, summarize `totalCount` and ask the user to narrow the ICP before continuing.
 

@@ -5,14 +5,29 @@ import { apolloRequest, type ApolloFetch } from "../lib/client.ts";
 import { ApolloApiError, ApolloResponseParseError } from "../lib/errors.ts";
 
 const inputSchema = z.object({
-  organizationIds: z.array(z.string().min(1)).min(1).max(100).describe(
+  organizationIds: z.array(z.string().min(1)).max(100).optional().describe(
     "Apollo organization IDs to scope the people search to.",
+  ),
+  organizationDomains: z.array(z.string().min(1)).max(100).optional().describe(
+    "Company domains to restrict the people search to known accounts.",
+  ),
+  organizationLocations: z.array(z.string().min(1)).max(20).optional().describe(
+    "Headquarter locations of organizations to guide the people search.",
   ),
   titles: z.array(z.string().min(1)).max(50).optional().describe(
     "Job titles to filter on, such as VP Sales or Head of Growth.",
   ),
   personLocations: z.array(z.string().min(1)).max(20).optional().describe(
     "Optional person-level locations such as California, US.",
+  ),
+  seniorities: z.array(z.string().min(1)).max(20).optional().describe(
+    "Optional seniority filters such as manager, director, or vp.",
+  ),
+  departments: z.array(z.string().min(1)).max(20).optional().describe(
+    "Optional department filters such as sales, finance, or operations.",
+  ),
+  includeSimilarTitles: z.boolean().optional().describe(
+    "Allow Apollo to include titles similar to the strings you specified.",
   ),
   keywords: z.string().min(1).optional().describe(
     "Optional free-text keyword query for Apollo people search.",
@@ -26,6 +41,24 @@ const inputSchema = z.object({
   perPage: z.number().int().min(1).max(100).default(25).describe(
     "Maximum people to return per page, between 1 and 100.",
   ),
+}).superRefine((value, ctx) => {
+  if (
+    (value.organizationIds?.length ?? 0) === 0
+    && (value.organizationDomains?.length ?? 0) === 0
+    && (value.organizationLocations?.length ?? 0) === 0
+    && (value.titles?.length ?? 0) === 0
+    && (value.personLocations?.length ?? 0) === 0
+    && (value.keywords?.trim().length ?? 0) === 0
+    && (value.seniorities?.length ?? 0) === 0
+    && (value.departments?.length ?? 0) === 0
+    && !value.includeSimilarTitles
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provide at least one people search filter (titles, locations, keywords, seniorities, departments, or organization constraints).",
+      path: ["titles"],
+    });
+  }
 });
 
 const personSchema = z.object({
@@ -76,9 +109,14 @@ export async function searchApolloPeople(
       body: {
         ...(input.body ?? {}),
         organization_ids: input.organizationIds,
+        organization_domains: input.organizationDomains,
+        organization_locations: input.organizationLocations,
         person_titles: input.titles,
         person_locations: input.personLocations,
-        q_keywords: input.keywords,
+        person_seniorities: input.seniorities,
+        person_departments: input.departments,
+        include_similar_titles: input.includeSimilarTitles,
+        q_keywords: combineKeywords(input),
         page: input.page,
         per_page: input.perPage,
       },
@@ -100,6 +138,14 @@ export async function searchApolloPeople(
     totalCount: payload.total_entries,
     hasMore: input.page * input.perPage < payload.total_entries,
   };
+}
+
+function combineKeywords(input: z.output<typeof inputSchema>): string | undefined {
+  const value = input.keywords?.trim();
+  if (!value) {
+    return undefined;
+  }
+  return value;
 }
 
 export const apolloSearchPeopleTool = defineTool({
