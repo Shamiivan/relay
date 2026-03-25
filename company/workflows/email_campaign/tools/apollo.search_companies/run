@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-ROOT="$(realpath "$(dirname "$0")/../../../../..")"
-exec "$ROOT/node_modules/.bin/tsx" "$ROOT/tools/apollo/apollo.search_companies/tool.ts"
