@@ -9,12 +9,8 @@
   },
   "scripts": {
     "bot": "tsx apps/bot/src/index.ts",
-    "cli": "tsx apps/cli/src/index.ts",
-    "convex:dev": "convex dev",
-    "convex:codegen": "convex codegen",
     "gmail:connect": "tsx tools/gmail.connect.ts",
     "tools:codegen": "tsx tools/codegen.ts",
-    "inspector": "tsx apps/inspector/src/index.tsx",
     "check": "tsc -p tsconfig.base.json --noEmit",
     "test": "node --import tsx --test \"tools/**/*.test.ts\" \"company/workflows/**/*.test.ts\""
   },
