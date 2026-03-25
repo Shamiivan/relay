@@ -77,7 +77,7 @@ test("company workflow time.now shim fails loudly on empty stdin", {
 });
 
 test("company workflow time.now shim fails loudly when launched with a TTY and no stdin payload", {
-  skip: !subprocessExecutionAvailable,
+  skip: !subprocessExecutionAvailable || !process.stdin.isTTY,
 }, () => {
   const result = spawnSync(shimPath, [], {
     cwd: repoRoot,

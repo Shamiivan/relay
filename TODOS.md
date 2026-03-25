@@ -31,7 +31,7 @@
 ## P2
 
 ### Apollo pagination: expose total_count
-**What:** `apollo.search_people` and `apollo.search_companies` currently return only page 1. The tool output should include `total_count` from the Apollo API response alongside the results. The workflow README should instruct the agent to summarize total vs. returned count when presenting the list to the human for approval.
+**What:** `apollo.search_people` currently returns only page 1. The tool output should include `total_count` from the Apollo API response alongside the results. The workflow README should instruct the agent to summarize total vs. returned count when presenting the list to the human for approval.
 **Why:** Without `total_count`, the human approves a sample thinking it's the full list. Misleading for large ICPs.
 **Where to start:** Add `total_count` field to the tool output Zod schema. Apollo API returns pagination metadata in response body.
 **Depends on:** Apollo tool wrappers being shipped in `sales_outreach` PR.

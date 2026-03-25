@@ -92,6 +92,43 @@ test("searchApolloPeople maps Apollo people into the tool output shape", async (
   });
 });
 
+test("searchApolloPeople normalizes boolean-style q_keywords into plain terms", async () => {
+  let capturedBody = "";
+
+  await searchApolloPeople(
+    {
+      titles: ["Founder"],
+      keywords: "accounting OR accounting firm OR bookkeeping",
+      perPage: 5,
+    },
+    {
+      env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        capturedBody = String(init?.body ?? "");
+        return {
+          ok: true,
+          status: 200,
+          headers: { get() { return null; } },
+          async text() {
+            return "";
+          },
+          async json() {
+            return {
+              people: [],
+              total_entries: 0,
+            };
+          },
+        };
+      },
+    },
+  );
+
+  assert.equal(
+    JSON.parse(capturedBody).q_keywords,
+    "accounting accounting firm bookkeeping",
+  );
+});
+
 test("searchApolloPeople falls back to obfuscated last name and keeps nullable fields stable", async () => {
   const result = await searchApolloPeople(
     { organizationIds: ["org-1"], page: 1, perPage: 25 },
@@ -185,6 +222,19 @@ test("searchApolloPeople rejects invalid input before hitting the API", async ()
         env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
         fetchImpl: async () => {
           throw new Error("fetch should not run for invalid input");
+        },
+      },
+    ),
+    z.ZodError,
+  );
+
+  await assert.rejects(
+    searchApolloPeople(
+      { titles: ["Founder"], keywords: "OR AND NOT" },
+      {
+        env: { APOLLO_API_KEY: "test-key" } as NodeJS.ProcessEnv,
+        fetchImpl: async () => {
+          throw new Error("fetch should not run for operator-only keywords");
         },
       },
     ),

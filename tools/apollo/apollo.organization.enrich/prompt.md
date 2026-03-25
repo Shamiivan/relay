@@ -9,7 +9,7 @@ Returns:
 - `response`: raw Apollo JSON response from `POST /api/v1/organizations/enrich`
 
 Notes:
-- This is useful after `apollo.search_companies` when you want more company detail than the normalized search output carries.
+- This is useful after `apollo.search_people` when you want more company detail than the normalized people output carries.
 - Prefer a stable identifier such as company domain when available.
 
 Example:

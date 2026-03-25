@@ -40,7 +40,7 @@ Scope:
 - start from a rough offer idea
 - refine the pain point and offer framing
 - use web search to discover likely trigger events and recent signals
-- use Apollo to search for matching companies and people
+- use Apollo to search for matching people and infer target accounts from those results
 - loop with the human to qualify whether the segment is sensible
 - write approved campaign artifacts
 - draft a message theme and a 5-email sequence
@@ -95,7 +95,7 @@ Available workflow tools:
 
 - `file.write` and `file.update` for `icp.md` and `offer.md`
 - `web.search` and `web.fetch` for trigger and pain research
-- `apollo.search_people` for account/persona discovery and `apollo.search_companies` only when you need normalized company output for an ICP you already understand
+- `apollo.search_people` for account/persona discovery
 - `instantly.account.search`, `instantly.campaign.create`, `instantly.campaign.update`, `instantly.lead.add`, and `instantly.campaign.activate` for later manual execution after the human approves the campaign settings
 
 Default discovery loop:
@@ -103,7 +103,7 @@ Default discovery loop:
 1. rough offer idea from the human
 2. refine the pain point and business result
 3. search the web for trigger patterns and recent company signals
-4. use `apollo.search_people` to find matching personas (optional `apollo.search_companies` only after you have precise account filters)
+4. use `apollo.search_people` to find matching personas and target-account patterns
 5. write `research.md`
 6. review findings with the human
 7. tighten or widen the segment

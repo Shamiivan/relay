@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(repoRoot, "workflows/sales_prospect_research/tools/web.search/run");
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -65,41 +64,6 @@ test("tool executable returns the standard envelope over stdin/stdout", {
         EXPECTED_BRAVE_QUERY: "B2B SaaS pain points",
         EXPECTED_BRAVE_COUNT: "1",
         EXPECTED_BRAVE_OFFSET: "0",
-      },
-    );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    ok: true,
-    result: {
-      results: [
-        {
-          title: "Pain Points",
-          url: "https://example.com/pain-points",
-          description: "Sales & Marketing pain-points for SaaS",
-        },
-      ],
-      query: "B2B SaaS pain points",
-      moreResultsAvailable: false,
-    },
-  });
-});
-
-test("workflow shim resolves to the same tool contract the agent will call", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    { query: "B2B SaaS pain points", count: 1 },
-      {
-        ...process.env,
-        BRAVE_API_KEY: "test-key",
-        EXPECTED_BRAVE_QUERY: "B2B SaaS pain points",
-        EXPECTED_BRAVE_COUNT: "1",
-        EXPECTED_BRAVE_OFFSET: "0",
-        NODE_OPTIONS: `--import=${fetchMockPath}`,
       },
     );
 

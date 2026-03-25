@@ -1,6 +1,6 @@
 Search Apollo organizations using the native organizations search endpoint.
 
-Use this when you need the direct Apollo organization search response rather than Relay's normalized `apollo.search_companies` output.
+Use this when you need direct organization search fields that are not covered by `apollo.search_people` or `apollo.organization.enrich`.
 
 Arguments:
 - `body`: native Apollo `organizations/search` request body
@@ -9,8 +9,8 @@ Returns:
 - `response`: raw Apollo JSON response from `POST /api/v1/organizations/search`
 
 Notes:
-- Prefer `apollo.search_companies` for normal sales-agency prospecting because it returns normalized companies plus `totalCount` and `hasMore`.
-- Use this tool when you need Apollo-specific search fields that the normalized wrapper does not expose.
+- Prefer `apollo.search_people` for lead discovery in Relay.
+- Use this tool when you need Apollo-specific organization search fields that the people wrapper does not expose.
 
 Example:
 ```json

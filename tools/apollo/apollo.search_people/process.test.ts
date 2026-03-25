@@ -7,10 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(
-  repoRoot,
-  "workflows/sales_prospect_research/tools/apollo.search_people/run",
-);
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -66,44 +62,6 @@ test("tool executable returns the standard envelope over stdin/stdout", {
       APOLLO_API_KEY: "test-key",
       EXPECTED_APOLLO_ORG_ID: "org-1",
       EXPECTED_APOLLO_PEOPLE_PER_PAGE: "1",
-    },
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    ok: true,
-    result: {
-      people: [
-        {
-          id: "person-1",
-          firstName: "Taylor",
-          lastName: "Smith",
-          title: "VP Sales",
-          organizationId: "org-1",
-          organizationName: "Example Corp",
-          hasEmail: true,
-        },
-      ],
-      totalCount: 2,
-      hasMore: true,
-    },
-  });
-});
-
-test("workflow shim resolves to the same tool contract the agent will call", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    { organizationIds: ["org-1"], perPage: 1 },
-    {
-      ...process.env,
-      APOLLO_API_KEY: "test-key",
-      EXPECTED_APOLLO_ORG_ID: "org-1",
-      EXPECTED_APOLLO_PEOPLE_PER_PAGE: "1",
-      NODE_OPTIONS: `--import=${fetchMockPath}`,
     },
   );
 

@@ -3,6 +3,7 @@ import { defineTool, promptFile, runDeclaredTool } from "../../sdk";
 import type { ToolErrorInfo } from "../../sdk";
 import { apolloRequest, type ApolloFetch } from "../lib/client.ts";
 import { ApolloApiError, ApolloResponseParseError } from "../lib/errors.ts";
+import { normalizeApolloKeywords } from "../lib/keywords.ts";
 
 const inputSchema = z.object({
   organizationIds: z.array(z.string().min(1)).max(100).optional().describe(
@@ -58,6 +59,18 @@ const inputSchema = z.object({
       message: "Provide at least one people search filter (titles, locations, keywords, seniorities, departments, or organization constraints).",
       path: ["titles"],
     });
+  }
+
+  if (value.keywords !== undefined) {
+    try {
+      normalizeApolloKeywords(value.keywords);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "Invalid keywords",
+        path: ["keywords"],
+      });
+    }
   }
 });
 
@@ -145,14 +158,14 @@ function combineKeywords(input: z.output<typeof inputSchema>): string | undefine
   if (!value) {
     return undefined;
   }
-  return value;
+  return normalizeApolloKeywords(value);
 }
 
 export const apolloSearchPeopleTool = defineTool({
   name: "apollo.search_people",
   resource: "apollo.person",
   capability: "search",
-  description: "Search Apollo people within a known organization scope and return normalized prospect records.",
+  description: "Search Apollo people with ICP filters and return normalized prospect records.",
   idempotent: true,
   input: inputSchema,
   output: z.object({

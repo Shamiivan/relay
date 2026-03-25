@@ -7,10 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(
-  repoRoot,
-  "workflows/sales_prospect_research/tools/instantly.email.search/run",
-);
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -63,52 +59,6 @@ test("email search executable returns the standard envelope", {
       EXPECTED_INSTANTLY_EMAIL_CAMPAIGN_ID: "019c0e38-c5be-70d5-b730-fdd27bea4548",
       EXPECTED_INSTANTLY_EMAIL_LIST_ID: "019c0e38-c5be-70d5-b730-fdd27bea4549",
       EXPECTED_INSTANTLY_EMAIL_EACCOUNT: "sender@example.com,sender2@example.com",
-    },
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    ok: true,
-    result: {
-      emails: [{
-        id: "email-1",
-        subject: "Welcome",
-        fromAddressEmail: "sender@example.com",
-        leadEmail: "lead@example.com",
-        eaccount: "sender@example.com",
-        campaignId: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-        threadId: "thread-1",
-        unread: true,
-        timestampCreated: "2026-03-05T00:00:00.000Z",
-      }],
-      nextStartingAfter: "email-cursor-2",
-    },
-  });
-});
-
-test("email search workflow shim resolves to the same contract", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    {
-      search: "welcome",
-      limit: 1,
-      campaignId: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-      listId: "019c0e38-c5be-70d5-b730-fdd27bea4549",
-      eaccount: ["sender@example.com", "sender2@example.com"],
-    },
-    {
-      ...process.env,
-      INSTANTLY_API_KEY: "test-key",
-      EXPECTED_INSTANTLY_EMAIL_SEARCH: "welcome",
-      EXPECTED_INSTANTLY_EMAIL_LIMIT: "1",
-      EXPECTED_INSTANTLY_EMAIL_CAMPAIGN_ID: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-      EXPECTED_INSTANTLY_EMAIL_LIST_ID: "019c0e38-c5be-70d5-b730-fdd27bea4549",
-      EXPECTED_INSTANTLY_EMAIL_EACCOUNT: "sender@example.com,sender2@example.com",
-      NODE_OPTIONS: `--import=${fetchMockPath}`,
     },
   );
 

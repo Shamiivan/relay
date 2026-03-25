@@ -7,10 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(
-  repoRoot,
-  "workflows/sales_prospect_research/tools/instantly.campaign.search/run",
-);
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -67,41 +63,6 @@ test("tool executable returns the standard envelope over stdin/stdout", {
       EXPECTED_INSTANTLY_SEARCH: "Summer Sale Campaign",
       EXPECTED_INSTANTLY_LIMIT: "1",
       EXPECTED_INSTANTLY_STATUS: "1",
-    },
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    ok: true,
-    result: {
-      campaigns: [
-        {
-          id: "campaign-1",
-          name: "Summer Sale Campaign",
-          status: 1,
-          timestampCreated: "2026-01-30T09:25:22.952Z",
-        },
-      ],
-      nextStartingAfter: "cursor-999",
-    },
-  });
-});
-
-test("workflow shim resolves to the same tool contract the agent will call", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    { search: "Summer Sale Campaign", limit: 1, status: 1 },
-    {
-      ...process.env,
-      INSTANTLY_API_KEY: "test-key",
-      EXPECTED_INSTANTLY_SEARCH: "Summer Sale Campaign",
-      EXPECTED_INSTANTLY_LIMIT: "1",
-      EXPECTED_INSTANTLY_STATUS: "1",
-      NODE_OPTIONS: `--import=${fetchMockPath}`,
     },
   );
 

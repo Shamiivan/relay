@@ -129,12 +129,12 @@ export async function runDeclaredTool<TTool extends ToolDeclaration>(
     const rawResult = await tool.handler({ input });
     writeJsonOutput({ ok: true, result: tool.output.parse(rawResult) });
   } catch (error) {
-    if (tool.onError) {
-      writeJsonOutput({ ok: false, error: await tool.onError(error) });
-      return;
-    }
     if (error instanceof JsonStdinError) {
       writeJsonOutput({ ok: false, error: { type: "invalid_input", message: error.message } });
+      return;
+    }
+    if (tool.onError) {
+      writeJsonOutput({ ok: false, error: await tool.onError(error) });
       return;
     }
     const message = error instanceof Error ? error.message : "Unknown error";

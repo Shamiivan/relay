@@ -9,7 +9,7 @@ Returns:
 - `response`: raw Apollo JSON response from `POST /api/v1/accounts/bulk_create`
 
 Notes:
-- Prefer `apollo.search_companies` or `apollo.organization.enrich` before this tool so the account payload is based on confirmed company data.
+- Prefer `apollo.search_people` to discover target contacts and `apollo.organization.enrich` when you need to confirm company data before creating accounts.
 - Do not use this for exploratory work. Use it only when the user wants records written into Apollo.
 
 Example:

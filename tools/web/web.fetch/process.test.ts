@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(repoRoot, "workflows/sales_prospect_research/tools/web.fetch/run");
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -71,29 +70,6 @@ test("tool executable returns the standard envelope over stdin/stdout", {
   assert.equal(parsed.result.title, "Test Page");
   assert.ok(parsed.result.content.includes("Hello world from"));
   assert.ok(!parsed.result.content.includes("<strong>"), "HTML tags stripped");
-  assert.equal(parsed.result.truncated, false);
-});
-
-test("workflow shim resolves to the same tool contract the agent will call", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    { url: TEST_URL },
-    {
-      ...process.env,
-      EXPECTED_FETCH_URL: TEST_URL,
-      NODE_OPTIONS: `--import=${fetchMockPath}`,
-    },
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  const parsed = JSON.parse(result.stdout);
-  assert.equal(parsed.ok, true);
-  assert.equal(parsed.result.url, TEST_URL);
-  assert.equal(parsed.result.title, "Test Page");
   assert.equal(parsed.result.truncated, false);
 });
 

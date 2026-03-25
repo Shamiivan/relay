@@ -1,6 +1,6 @@
 Search Apollo people across the full dataset so you can find net-new prospects without needing Apollo industry tag IDs or organization inputs.
 
-Run `apollo.search_people` during discovery to explore titles, locations, seniorities, and departments. Use `apollo.search_companies` afterwards only when you have a concrete account list to normalize.
+Run `apollo.search_people` during discovery and for account qualification. This is the primary Apollo search surface in Relay.
 
 Do not assume the response includes unlocked email addresses. Use `hasEmail` as availability metadata only.
 

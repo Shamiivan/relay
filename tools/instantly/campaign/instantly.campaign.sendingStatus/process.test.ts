@@ -7,10 +7,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
 const toolPath = path.resolve(__dirname, "./tool.ts");
-const shimPath = path.resolve(
-  repoRoot,
-  "workflows/sales_prospect_research/tools/instantly.campaign.sendingStatus/run",
-);
 const fetchMockPath = path.resolve(__dirname, "./process-fetch-mock.mjs");
 const tsxLoaderPath = path.join(repoRoot, "node_modules", "tsx", "dist", "loader.mjs");
 
@@ -57,41 +53,6 @@ test("campaign sending status executable returns the standard envelope", {
       INSTANTLY_API_KEY: "test-key",
       EXPECTED_CAMPAIGN_ID: "019c0e38-c5be-70d5-b730-fdd27bea4548",
       EXPECTED_WITH_AI_SUMMARY: "true",
-    },
-  );
-
-  assert.equal(result.exitCode, 0);
-  assert.equal(result.stderr, "");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    ok: true,
-    result: {
-      diagnostics: {
-        campaign_id: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-        status: "ok",
-      },
-      summary: {
-        title: "Healthy",
-      },
-    },
-  });
-});
-
-test("campaign sending status workflow shim resolves to the same contract", {
-  skip: !subprocessExecutionAvailable,
-}, async () => {
-  const result = await runJsonTool(
-    shimPath,
-    [],
-    {
-      campaignId: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-      withAiSummary: true,
-    },
-    {
-      ...process.env,
-      INSTANTLY_API_KEY: "test-key",
-      EXPECTED_CAMPAIGN_ID: "019c0e38-c5be-70d5-b730-fdd27bea4548",
-      EXPECTED_WITH_AI_SUMMARY: "true",
-      NODE_OPTIONS: `--import=${fetchMockPath}`,
     },
   );
 
