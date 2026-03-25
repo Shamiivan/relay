@@ -13,42 +13,40 @@ returns:
 
 `apollo.search_people` exposes the shared Apollo people search tool inside the `email_campaign` workflow.
 
-Use it only after the ICP and targeting are approved.
+Use it for both net-new discovery and for finding personas once a set of accounts is locked in. Unlike the company search wrapper, the people search can be run without knowing any Apollo IDs — you can target job titles, person locations, seniority, departments, and even organization headquarter filters directly. When you already know some Apollo organizations, include `organizationIds` or `organizationDomains` to tighten the scope.
 
-## Example
+## Example: net-new discovery (matches Apollo's People API tutorial)
 
 ```bash
 printf '%s\n' '{
-  "organizationIds": ["57c4ace7a6da9867ee5599e7"],
-  "titles": ["operations manager", "head of operations"],
-  "personLocations": ["North America"],
-  "perPage": 10
+  "titles": ["sales director", "director sales", "director, sales"],
+  "personLocations": ["California, US", "Oregon, US", "Washington, US"],
+  "perPage": 5
 }' | company/workflows/email_campaign/tools/apollo.search_people/run
 ```
 
-Verified email example:
+This mirrors Apollo’s documented West Coast sales director search but routed through the normalized `apollo.search_people` contract.
+
+## Example: known accounts + persona tuning
 
 ```bash
 printf '%s\n' '{
   "organizationIds": ["57c4ace7a6da9867ee5599e7"],
   "titles": ["operations manager"],
-  "body": {
-    "contact_email_status_v2": ["verified"]
-  },
+  "organizationLocations": ["North America"],
+  "personLocations": ["North America"],
   "perPage": 10
 }' | company/workflows/email_campaign/tools/apollo.search_people/run
 ```
 
-Seniority and department tuning example:
+## Example: expand seniority, department, and similarity rules
 
 ```bash
 printf '%s\n' '{
-  "organizationIds": ["org_1", "org_2", "org_3"],
-  "body": {
-    "person_seniorities": ["manager", "director", "vp"],
-    "person_departments": ["operations", "finance"],
-    "include_similar_titles": true
-  },
-  "perPage": 25
+  "titles": ["operations manager"],
+  "seniorities": ["manager", "director"],
+  "departments": ["operations", "finance"],
+  "includeSimilarTitles": true,
+  "perPage": 10
 }' | company/workflows/email_campaign/tools/apollo.search_people/run
 ```

@@ -49,7 +49,7 @@ Scope:
 
 Out of scope:
 
-- campaign creation
+- autonomous campaign creation during the default discovery loop
 - campaign activation
 - autonomous sending
 
@@ -95,15 +95,15 @@ Available workflow tools:
 
 - `file.write` and `file.update` for `icp.md` and `offer.md`
 - `web.search` and `web.fetch` for trigger and pain research
-- `apollo.search_companies` and `apollo.search_people` for account and persona search
-- `instantly.account.search`, `instantly.campaign.create`, `instantly.campaign.update`, `instantly.lead.add`, and `instantly.campaign.activate` for later campaign execution
+- `apollo.search_people` for account/persona discovery and `apollo.search_companies` only when you need normalized company output for an ICP you already understand
+- `instantly.account.search`, `instantly.campaign.create`, `instantly.campaign.update`, `instantly.lead.add`, and `instantly.campaign.activate` for later manual execution after the human approves the campaign settings
 
 Default discovery loop:
 
 1. rough offer idea from the human
 2. refine the pain point and business result
 3. search the web for trigger patterns and recent company signals
-4. search Apollo for matching accounts and likely personas
+4. use `apollo.search_people` to find matching personas (optional `apollo.search_companies` only after you have precise account filters)
 5. write `research.md`
 6. review findings with the human
 7. tighten or widen the segment

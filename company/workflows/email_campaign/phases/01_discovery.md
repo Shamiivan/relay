@@ -29,8 +29,8 @@ Instructions:
    - trigger patterns
    - recent company signals
    - recency-sensitive evidence
-5. Use `company/workflows/email_campaign/tools/apollo.search_companies/run` and `company/workflows/email_campaign/tools/apollo.search_people/run` to search for:
-   - matching account patterns
+5. Use `company/workflows/email_campaign/tools/apollo.search_people/run` to search for:
+   - matching account-degree personas via titles, keywords, locations, and seniority filters
    - likely personas who feel the pain
 6. Use `company/workflows/email_campaign/tools/file.write/run` to create or update `research.md` with the evidence gathered from web and Apollo before finalizing the segment.
 7. Review the candidate segment with the human and tighten or widen it until it is sensible.
