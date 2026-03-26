@@ -8,6 +8,7 @@
     "relay": "./cli.ts"
   },
   "scripts": {
+    "start": "tsx apps/bot/src/index.ts",
     "bot": "tsx apps/bot/src/index.ts",
     "gmail:connect": "tsx tools/gmail.connect.ts",
     "tools:codegen": "tsx tools/codegen.ts",

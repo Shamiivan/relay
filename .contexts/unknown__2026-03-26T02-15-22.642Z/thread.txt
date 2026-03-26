@@ -1,0 +1,143 @@
+<system_note>
+You are a the company chief of staff assistant to the CEO.
+Working in avantech.
+Your ONLY output mechanism is tool calls — never respond with plain text.
+
+Tools:
+- bash: discover and run workflow tools under workflows/ and company/workflows/
+- ask_human: ask the user for clarification when their request is ambiguous
+- done_for_now: deliver your final answer — ALWAYS call this to complete the task
+
+Rules:
+- NEVER respond with plain text. Every turn MUST end with a tool call.
+- To answer the user: run a workflow tool via bash, then call done_for_now with the result.
+- If tool results are already in the conversation, call done_for_now immediately.
+- done_for_now is the ONLY way to complete the task.
+- Read workflow guidance with: cat workflows/<name>/README.md or cat company/workflows/<name>/README.md
+- Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md or cat company/workflows/<name>/tools/<tool>/README.md
+- When the correct tool or arguments are not obvious, read the relevant README before running the tool.
+
+Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run or printf '<json>' | company/workflows/<name>/tools/<tool>/run
+</system_note>
+
+<executable_call>
+executableName: bash
+args: tree company/workflows/
+</executable_call>
+
+<executable_result>
+executableName: bash
+result: company/workflows/
+├── board_meeting_prep
+│   ├── README.md
+│   ├── tasks
+│   │   └── find-reference-doc
+│   │       ├── package.json
+│   │       ├── README.md
+│   │       └── run.ts
+│   └── tools
+│       ├── docs.read
+│       │   ├── package.json
+│       │   ├── README.md
+│       │   └── run
+│       ├── docs.write
+│       │   ├── package.json
+│       │   ├── README.md
+│       │   └── run
+│       ├── drive.copy
+│       │   ├── package.json
+│       │   ├── README.md
+│       │   └── run
+│       ├── drive.search
+│       │   ├── package.json
+│       │   ├── README.md
+│       │   └── run
+│       └── time.now
+│           ├── package.json
+│           ├── process.test.ts
+│           ├── README.md
+│           └── run
+├── email_campaign
+│   ├── context
+│   │   ├── copy-principles.md
+│   │   ├── icp-template.md
+│   │   ├── research-template.md
+│   │   └── sequence-structure.md
+│   ├── phases
+│   │   ├── 01_discovery.md
+│   │   └── 02_offer_creation.md
+│   ├── README.md
+│   ├── tools
+│   │   ├── apollo.search_people
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── file.update
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── file.write
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── instantly.account.search
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── instantly.campaign.activate
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── instantly.campaign.create
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── instantly.campaign.update
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── instantly.lead.add
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   ├── web.fetch
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── run
+│   │   └── web.search
+│   │       ├── package.json
+│   │       ├── README.md
+│   │       └── run
+│   └── workflow.test.ts
+└── public_web_search
+    ├── README.md
+    └── tools
+        ├── web.fetch
+        │   ├── README.md
+        │   └── run
+        ├── web.fetch-llm
+        │   ├── README.md
+        │   └── run
+        └── web.search
+            ├── README.md
+            └── run
+
+29 directories, 65 files
+
+</executable_result>
+
+<user_message>
+hey how are you?
+</user_message>
+
+<request_human_clarification>
+prompt: Hello! I'm doing great, thanks for asking. What can I help you with today?
+</request_human_clarification>
+
+<human_response>
+d
+</human_response>
+
+<request_human_clarification>
+prompt: I'm sorry, I didn't understand your request. Could you please provide more details about what you'd like me to do?
+</request_human_clarification>
