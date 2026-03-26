@@ -27,6 +27,7 @@ jobs:
             set -e
             cd ~/app
             git pull origin main
-            pnpm install --frozen-lockfile
+            rm -rf node_modules
+            pnpm install
             pnpm check
             pm2 restart pm2.config.cjs --update-env || pm2 start pm2.config.cjs

@@ -28,7 +28,7 @@ sudo -u "$APP_USER" git clone "$REPO_URL" "$APP_DIR"
 
 echo "==> Installing dependencies"
 cd "$APP_DIR"
-sudo -u "$APP_USER" pnpm install --frozen-lockfile
+sudo -u "$APP_USER" pnpm install
 
 echo "==> Setting up PM2 startup (auto-start on boot)"
 pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER"
