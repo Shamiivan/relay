@@ -11,7 +11,7 @@ import {
   SessionManager,
   type ResourceLoader,
   type ToolDefinition,
-} from "../../pi-mono/packages/coding-agent/src/index.ts";
+} from "@mariozechner/pi-coding-agent";
 import { Thread } from "./thread.ts";
 import type { SessionMeta } from "./context-store.ts";
 import type { ThreadEvent } from "./thread.ts";
