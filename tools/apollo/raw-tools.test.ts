@@ -115,10 +115,8 @@ test("Apollo raw endpoint tools hit the expected path with X-Api-Key auth", asyn
 
   try {
     loadDotenv();
-    const expectedApiKey = process.env.APOLLO_API_KEY;
-    if (!expectedApiKey) {
-      throw new Error("Expected APOLLO_API_KEY to be loaded for Apollo raw endpoint tests");
-    }
+    const expectedApiKey = process.env.APOLLO_API_KEY?.trim() || "test-apollo-key";
+    process.env.APOLLO_API_KEY = expectedApiKey;
 
     for (const endpoint of rawEndpointCases) {
       let capturedUrl = "";

@@ -249,8 +249,10 @@ test("searchWeb validates input before making a request", async () => {
 
 test("webSearchTool.handler returns the normalized output shape", async () => {
   const originalFetch = globalThis.fetch;
+  const previousApiKey = process.env.BRAVE_API_KEY;
 
   try {
+    process.env.BRAVE_API_KEY = previousApiKey?.trim() || "test-brave-key";
     globalThis.fetch = (async () => ({
       ok: true,
       status: 200,
@@ -295,6 +297,11 @@ test("webSearchTool.handler returns the normalized output shape", async () => {
     });
   } finally {
     globalThis.fetch = originalFetch;
+    if (previousApiKey === undefined) {
+      delete process.env.BRAVE_API_KEY;
+    } else {
+      process.env.BRAVE_API_KEY = previousApiKey;
+    }
   }
 });
 
