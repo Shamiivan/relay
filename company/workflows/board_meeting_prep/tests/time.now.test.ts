@@ -5,8 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "../../../../../..");
-const shimPath = path.resolve(__dirname, "./run");
+const repoRoot = path.resolve(__dirname, "../../../..");
+const shimPath = path.resolve(__dirname, "../tools/time.now/run");
 
 function canSpawnSubprocesses(): boolean {
   const probe = spawnSync(process.execPath, ["-e", ""], {

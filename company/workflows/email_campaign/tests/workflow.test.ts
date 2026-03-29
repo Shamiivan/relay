@@ -11,8 +11,8 @@ function read(relativePath: string): string {
 }
 
 test("email_campaign workflow requires research.md before icp.md", () => {
-  const readme = read("./README.md");
-  const discovery = read("./phases/01_discovery.md");
+  const readme = read("../README.md");
+  const discovery = read("../phases/01_discovery.md");
 
   assert.match(readme, /`research\.md` must be created during discovery/);
   assert.match(readme, /5\. write `research\.md`/);
@@ -21,7 +21,7 @@ test("email_campaign workflow requires research.md before icp.md", () => {
 });
 
 test("email_campaign research template defines the required sections", () => {
-  const template = read("./context/research-template.md");
+  const template = read("../context/research-template.md");
 
   assert.match(template, /# Campaign Research/);
   assert.match(template, /## Offer Hypothesis/);
