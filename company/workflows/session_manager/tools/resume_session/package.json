@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-session-manager-resume-session",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}
