@@ -3,7 +3,12 @@ import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
-import { checkpointContext, updateStatus } from "./context-store.ts";
+import {
+  checkpointContext,
+  listContexts,
+  reconcileInProgress,
+  updateStatus,
+} from "./context-store.ts";
 import {
   createAgentSession,
   createBashTool,
@@ -14,17 +19,37 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { Thread } from "./thread.ts";
 import type { SessionMeta } from "./context-store.ts";
+import { deriveSessionName } from "./session-naming.ts";
 import type { ThreadEvent } from "./thread.ts";
 import type { TransportAdapter } from "./transport.ts";
 
-const CONTRACT = `You are a the company chief of staff assistant to the CEO.
+// Write current thread events to the session file — called on every append
+function writeSessionEvents(contextDir: string, sessionId: string, events: ThreadEvent[]): void {
+  const path = join(contextDir, "in_progress", sessionId, "thread-events.json");
+  try {
+    writeFileSync(path, JSON.stringify(events), "utf8");
+  } catch {
+    // Best-effort — don't crash the agent if the write fails
+  }
+}
+
+// Rewrite the run log with the full serialized thread (same format the LLM sees)
+function writeRunLog(logPath: string, serialized: string): void {
+  try {
+    writeFileSync(logPath, serialized, "utf8");
+  } catch {
+    // Best-effort
+  }
+}
+
+const CONTRACT = `You are the company chief of staff assistant to the CEO.
 Working in avantech.
 Your ONLY output mechanism is tool calls — never respond with plain text.
 
 Tools:
 - bash: discover and run workflow tools under workflows/ and company/workflows/
-- ask_human: ask the user for clarification when their request is ambiguous
-- done_for_now: deliver your final answer — ALWAYS call this to complete the task
+- ask_human: ask the user a question — this also saves your progress. When mid-workflow, pass summary, next_steps, and artifacts so context is preserved.
+- done_for_now: deliver your final answer — the human will confirm if we are truly done
 
 Rules:
 - NEVER respond with plain text. Every turn MUST end with a tool call.
@@ -34,6 +59,7 @@ Rules:
 - Read workflow guidance with: cat workflows/<name>/README.md or cat company/workflows/<name>/README.md
 - Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md or cat company/workflows/<name>/tools/<tool>/README.md
 - When the correct tool or arguments are not obvious, read the relevant README before running the tool.
+- On startup: if a system_note lists prior paused sessions, review them before acting on the user message.
 
 Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run or printf '<json>' | company/workflows/<name>/tools/<tool>/run`;
 
@@ -87,11 +113,16 @@ function extractResultText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
+/**
+ * Create the ask_human tool.
+ * Transitions the session to `paused` before blocking for human input,
+ * storing rich handoff context so the session can be recovered.
+ */
 function createAskHumanTool(
   thread: Thread,
   transport: TransportAdapter,
-  /** Called before blocking for human input. Returns the session ID written to disk. */
-  onBeforePause: (question: string) => string,
+  contextDir: string,
+  getActiveSessionId: () => string | null,
 ): ToolDefinition {
   return {
     name: "ask_human",
@@ -99,13 +130,46 @@ function createAskHumanTool(
     description:
       "Ask the user a clarifying question when the request is ambiguous. " +
       "The user's answer will be returned as the tool result. " +
-      "Do NOT use this to get permission to run tools.",
+      "Do NOT use this to get permission to run tools. " +
+      "Pass summary, next_steps, and artifacts when mid-workflow so context is preserved.",
     parameters: Type.Object({
       question: Type.String({ description: "The question to ask the user" }),
+      summary: Type.Optional(Type.String({ description: "Summary of work done so far" })),
+      next_steps: Type.Optional(Type.Array(Type.String(), { description: "Planned next steps" })),
+      artifacts: Type.Optional(
+        Type.Array(
+          Type.Object({
+            ref: Type.String(),
+            description: Type.String(),
+          }),
+          { description: "Relevant artifacts produced so far" },
+        ),
+      ),
+      last_action: Type.Optional(Type.String({ description: "The last action taken" })),
     }),
-    execute: async (_toolCallId: string, params: { question: string }) => {
+    execute: async (
+      _toolCallId: string,
+      params: {
+        question: string;
+        summary?: string;
+        next_steps?: string[];
+        artifacts?: Array<{ ref: string; description: string }>;
+        last_action?: string;
+      },
+    ) => {
       thread.append({ type: "request_human_clarification", data: { prompt: params.question } });
-      onBeforePause(params.question);
+
+      const sessionId = getActiveSessionId();
+      if (sessionId) {
+        updateStatus(contextDir, sessionId, "paused", {
+          awaiting: params.question,
+          summary: params.summary,
+          next_steps: params.next_steps,
+          artifacts: params.artifacts,
+          last_action: params.last_action,
+        });
+      }
+
       const answer = await transport.promptForClarification(params.question);
       thread.append({ type: "human_response", data: answer });
       return { content: [{ type: "text", text: answer }], details: null };
@@ -113,13 +177,21 @@ function createAskHumanTool(
   };
 }
 
+/**
+ * Create the done_for_now tool.
+ * Transitions to paused with proposed_final, then asks the human to confirm.
+ * If confirmed → marks done, ends run.
+ * If rejected → appends system_note and continues the loop.
+ */
 function createDoneForNowTool(
   thread: Thread,
+  transport: TransportAdapter,
+  contextDir: string,
+  getActiveSessionId: () => string | null,
   onDone: (message: string) => void,
   abort: () => void,
   getWorkflowToolCalled: () => boolean,
-  /** Called when the task completes successfully — used to mark the session done. */
-  onComplete?: () => void,
+  onComplete: () => void,
 ): ToolDefinition {
   let called = false;
   return {
@@ -144,11 +216,39 @@ function createDoneForNowTool(
       }
       if (called) return { content: [{ type: "text", text: "Already done." }], details: null };
       called = true;
+
+      // Transition to paused with proposed_final while we wait for confirmation
+      const sessionId = getActiveSessionId();
+      if (sessionId) {
+        updateStatus(contextDir, sessionId, "paused", {
+          awaiting: "completion_confirmation",
+          proposed_final: params.message,
+        });
+      }
+
       thread.append({ type: "model_response", data: params.message });
-      onDone(params.message);
-      onComplete?.();
-      abort();
-      return { content: [{ type: "text", text: "Answer delivered." }], details: null };
+
+      // Ask the human for confirmation
+      const answer = await transport.promptForClarification(
+        `${params.message}\n\nAre we done? (yes / no)`,
+      );
+
+      if (answer.trim().toLowerCase().startsWith("y")) {
+        // Confirmed done
+        if (sessionId) {
+          updateStatus(contextDir, sessionId, "done");
+        }
+        onDone(params.message);
+        onComplete();
+        abort();
+        return { content: [{ type: "text", text: "Answer delivered." }], details: null };
+      }
+
+      // Not accepted — reset called so done_for_now can be called again
+      called = false;
+      const note = `Prior answer was not accepted by the user. Clarification: ${answer}`;
+      thread.append({ type: "system_note", data: note });
+      return { content: [{ type: "text", text: note }], details: null };
     },
   };
 }
@@ -217,13 +317,34 @@ export async function runRelay(
 
   // Session state — runner owns all of this, tools close over it
   const contextDir = join(cwd, ".contexts");
-  const scope = message.slice(0, 50).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
-  // On resume, seed the ID immediately so done_for_now marks it correctly
-  let activeSessionId: string | null = options.resumedSession?.id ?? null;
+
+  // Step 1: Reconcile any in_progress sessions from a previous crashed run
+  reconcileInProgress(contextDir);
+
   let lastWorkflowName = options.resumedSession?.meta.workflow ?? "unknown";
 
-  // const discoveryCommand = "find workflows company/ -maxdepth 3 \\( -type d -o -type f \\) | sort";
-  const discoveryCommand = "tree company/workflows/"
+  // Step 2: Create this session as in_progress immediately (or reuse the resumed id)
+  const now = new Date().toISOString();
+  const { displayName, slug } = deriveSessionName(message);
+  const sessionMeta: SessionMeta = options.resumedSession
+    ? options.resumedSession.meta
+    : {
+        id: `${slug}__${lastWorkflowName}__${now.replace(/:/g, "-")}`,
+        displayName,
+        workflow: lastWorkflowName,
+        createdAt: now,
+        updatedAt: now,
+        forkedFrom: null,
+        initialUserMessage: message,
+      };
+
+  let activeSessionId: string = options.resumedSession?.id
+    ?? checkpointContext(contextDir, sessionMeta, "[]");
+
+  /** Getter so tool closures always read the current value. */
+  const getActiveSessionId = () => activeSessionId;
+
+  const discoveryCommand = "tree company/workflows/";
   const discoveryResult = (() => {
     try {
       return execSync(discoveryCommand, { cwd, encoding: "utf8" });
@@ -233,24 +354,42 @@ export async function runRelay(
   })();
 
   const { resumedSession } = options;
-  const thread = new Thread({
-    state: null,
-    events: resumedSession
-      // Resume: rehydrate prior events directly and append the human's response
-      ? [
-          ...resumedSession.events,
-          { type: "human_response", data: resumedSession.humanResponse },
-        ]
-      // Fresh start: CONTRACT + discovery + user message
-      : [
-          { type: "system_note", data: CONTRACT },
-          { type: "executable_call", data: { executableName: "bash", args: discoveryCommand } },
-          { type: "executable_result", data: { executableName: "bash", result: discoveryResult } },
-          { type: "user_message", data: message },
-        ],
-  });
 
-  // Patch append to emit every event through the transport
+  // Step 3: Build initial thread events
+  const initialEvents: ThreadEvent[] = resumedSession
+    ? [
+        ...resumedSession.events,
+        { type: "human_response", data: resumedSession.humanResponse },
+      ]
+    : [
+        { type: "system_note", data: CONTRACT },
+        { type: "executable_call", data: { executableName: "bash", args: discoveryCommand } },
+        { type: "executable_result", data: { executableName: "bash", result: discoveryResult } },
+        { type: "user_message", data: message },
+      ];
+
+  // Step 4: Auto-inject paused sessions for the same workflow (fresh runs only)
+  if (!resumedSession) {
+    const pausedSessions = listContexts(contextDir, "paused").filter(
+      (s) => s.meta.workflow === lastWorkflowName,
+    );
+    if (pausedSessions.length > 0) {
+      const note =
+        "Paused sessions for this workflow:\n" +
+        pausedSessions
+          .map((s) => `- ${s.id}: awaiting "${s.meta.handoff?.awaiting ?? "unknown"}"`)
+          .join("\n");
+      initialEvents.push({ type: "system_note", data: note });
+    }
+  }
+
+  const runTs = new Date().toISOString().replace(/[:.]/g, "-");
+  mkdirSync(".runs", { recursive: true });
+  const runLogPath = `.runs/${slug}__${runTs}.log`;
+
+  const thread = new Thread({ state: null, events: initialEvents });
+
+  // Patch append to emit every event through the transport and write continuously
   const _append = thread.append.bind(thread);
   thread.append = (event: ThreadEvent) => {
     _append(event);
@@ -259,55 +398,30 @@ export async function runRelay(
     }
     // Fire-and-forget — transport decides whether to display
     transport.publishEvent(event).catch(() => { });
+    writeSessionEvents(contextDir, activeSessionId, thread.events);
+    writeRunLog(runLogPath, thread.serializeForLLM());
   };
-
-  const runTs = new Date().toISOString().replace(/[:.]/g, "-");
-  const slug = message.slice(0, 50).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "run";
-  const runDir = `.runs/${runTs}-${slug}`;
-  mkdirSync(runDir, { recursive: true });
 
   let completed = false;
   let workflowToolCalled = false;
 
   for (let turn = 0; turn < maxTurns; turn += 1) {
     let doneMessage: string | null = null;
-    const writeTurnSnapshot = () => {
-      writeFileSync(`${runDir}/turn-${turn}.txt`, thread.serializeForLLM(), "utf8");
-    };
 
     const { session, modelFallbackMessage } = await createAgentSession({
       resourceLoader,
       tools: [createApprovalGateBashTool(cwd, thread, transport)],
       customTools: [
-        createAskHumanTool(thread, transport, (question) => {
-          activeSessionId = checkpointContext(
-            contextDir,
-            {
-              workflow: lastWorkflowName,
-              scope,
-              status: "paused",
-              phase: "unknown",
-              pending: question,
-              approved: [],
-              rejected: [],
-              createdAt: new Date().toISOString(),
-              forkedFrom: null,
-            },
-            JSON.stringify(thread.events),
-            thread.serializeForLLM(),
-          );
-          return activeSessionId;
-        }),
+        createAskHumanTool(thread, transport, contextDir, getActiveSessionId),
         createDoneForNowTool(
           thread,
+          transport,
+          contextDir,
+          getActiveSessionId,
           (msg) => { doneMessage = msg; },
           () => { session.abort(); },
           () => workflowToolCalled,
-          () => {
-            if (activeSessionId) {
-              updateStatus(contextDir, activeSessionId, "done");
-            }
-          },
+          () => { /* onComplete — session already marked done inside the tool */ },
         ),
       ],
       sessionManager: SessionManager.inMemory(),
@@ -318,9 +432,11 @@ export async function runRelay(
     }
 
     const unsubscribe = session.subscribe((event) => {
-      console.log("==================================================================================================")
-      console.log("Event:", event);
-      console.log("==================================================================================================")
+      if (DEBUG_THREAD) {
+        console.log("==================================================================================================")
+        console.log("Event:", event);
+        console.log("==================================================================================================")
+      }
       if (event.type === "tool_execution_start" && event.toolName === "bash") {
         const command = typeof event.args === "object" && event.args !== null && "command" in event.args
           ? String((event.args as { command: unknown }).command)
@@ -328,7 +444,17 @@ export async function runRelay(
         if (WORKFLOW_RUN_PATTERN.test(command)) {
           workflowToolCalled = true;
           const wfMatch = command.match(/(?:workflows|company\/workflows)\/([^/]+)\/tools/);
-          if (wfMatch) lastWorkflowName = wfMatch[1];
+          if (wfMatch) {
+            lastWorkflowName = wfMatch[1];
+            if (sessionMeta.workflow === "unknown") {
+              sessionMeta.workflow = lastWorkflowName;
+              // Patch meta.json immediately so disk is always current
+              const metaPath = join(contextDir, "in_progress", activeSessionId, "meta.json");
+              try {
+                writeFileSync(metaPath, JSON.stringify({ ...sessionMeta, updatedAt: new Date().toISOString() }, null, 2), "utf8");
+              } catch { /* best-effort */ }
+            }
+          }
         }
         thread.append({ type: "executable_call", data: { executableName: "bash", args: command } });
       }
@@ -345,7 +471,6 @@ export async function runRelay(
     try {
       await session.prompt(thread.serializeForLLM());
     } finally {
-      writeTurnSnapshot();
       unsubscribe();
       session.dispose();
     }
