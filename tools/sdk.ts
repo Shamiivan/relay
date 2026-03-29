@@ -1,4 +1,3 @@
-import type { ModelTool } from "../packages/model/src";
 import { z } from "zod";
 import { JsonStdinError, readJsonInput, writeJsonOutput } from "./lib/json-stdio";
 
@@ -111,14 +110,6 @@ export function isToolDeclaration(value: unknown): value is ToolDeclaration {
     && value !== null
     && "__toolDeclaration" in value
     && (value as { __toolDeclaration?: unknown }).__toolDeclaration === true;
-}
-
-export function toModelTool(manifest: ToolManifest): ModelTool {
-  return {
-    name: manifest.name,
-    description: manifest.description,
-    parameters: manifest.parameters,
-  };
 }
 
 export async function runDeclaredTool<TTool extends ToolDeclaration>(
