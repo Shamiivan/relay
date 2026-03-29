@@ -13,16 +13,24 @@ const [subcommand, ...rest] = process.argv.slice(2);
 // relay list [--all]
 if (subcommand === "list") {
   const showAll = rest.includes("--all");
-  const sessions = listContexts(".contexts", showAll ? undefined : { status: "paused" });
+  const sessions = showAll
+    ? [
+        ...listContexts(".contexts", "in_progress"),
+        ...listContexts(".contexts", "paused"),
+        ...listContexts(".contexts", "done"),
+      ]
+    : listContexts(".contexts", "paused");
+
   if (sessions.length === 0) {
     console.log("No paused sessions.");
   } else {
     const pad = (s: string, n: number) => s.slice(0, n).padEnd(n);
-    console.log(`${pad("ID", 45)}  ${pad("WORKFLOW", 20)}  ${pad("SCOPE", 15)}  PENDING`);
-    console.log(`${"-".repeat(45)}  ${"-".repeat(20)}  ${"-".repeat(15)}  ${"-".repeat(30)}`);
+    console.log(`${pad("ID", 45)}  ${pad("WORKFLOW", 20)}  ${pad("STATUS", 12)}  AWAITING`);
+    console.log(`${"-".repeat(45)}  ${"-".repeat(20)}  ${"-".repeat(12)}  ${"-".repeat(40)}`);
     for (const s of sessions) {
+      const awaiting = s.meta.handoff?.awaiting ?? "-";
       console.log(
-        `${pad(s.id, 45)}  ${pad(s.meta.workflow, 20)}  ${pad(s.meta.scope, 15)}  ${s.meta.pending.slice(0, 60)}`,
+        `${pad(s.id, 45)}  ${pad(s.meta.workflow, 20)}  ${pad(s.status, 12)}  ${awaiting.slice(0, 60)}`,
       );
     }
   }
@@ -36,18 +44,20 @@ if (subcommand === "fork") {
     console.error("Usage: relay fork <session-id>");
     process.exit(1);
   }
-  const { meta, eventsJson, threadContent } = readContext(".contexts", sessionId);
-  if (meta.status !== "paused") {
-    console.error(`Can only fork paused sessions (${sessionId} is ${meta.status})`);
+  const { meta, eventsJson, status } = readContext(".contexts", sessionId);
+  if (status !== "paused") {
+    console.error(`Can only fork paused sessions (${sessionId} is ${status})`);
     process.exit(1);
   }
+  const now = new Date().toISOString();
   const newMeta = {
     ...meta,
-    status: "paused" as const,
-    createdAt: new Date().toISOString(),
+    id: `${meta.workflow}__${now.replace(/:/g, "-")}`,
+    createdAt: now,
+    updatedAt: now,
     forkedFrom: sessionId,
   };
-  const newId = checkpointContext(".contexts", newMeta, eventsJson, threadContent);
+  const newId = checkpointContext(".contexts", newMeta, eventsJson);
   console.log(`Forked: ${newId}`);
   process.exit(0);
 }
@@ -62,12 +72,13 @@ if (subcommand === "resume") {
   const { meta, eventsJson } = readContext(".contexts", sessionId);
   const events = JSON.parse(eventsJson) as ThreadEvent[];
 
-  // Show the pending question and collect the user's answer
+  // Show the awaiting question and collect the user's answer
+  const awaiting = meta.handoff?.awaiting ?? "What would you like to do next?";
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const humanResponse = (await rl.question(`${meta.pending}\n> `)).trim();
+  const humanResponse = (await rl.question(`${awaiting}\n> `)).trim();
   rl.close();
 
-  await runRelay(meta.pending, createCliTransport(), {
+  await runRelay(awaiting, createCliTransport(), {
     resumedSession: { id: sessionId, events, meta, humanResponse },
   });
   process.exit(0);

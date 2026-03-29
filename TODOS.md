@@ -53,3 +53,5 @@
 **Why:** Once multiple workflows use fixtures, changing the format without versioning requires migrating all fixture files blindly.
 **Where to start:** Define the fixture schema in `tests/fixtures/schema.ts` with a Zod validator when building the fixture system.
 **Effort:** S
+
+---
