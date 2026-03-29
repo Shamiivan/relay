@@ -19,7 +19,7 @@ pnpm gmail:connect  # OAuth flow for Google Workspace credentials
 
 ## Architecture
 
-**Entry point:** `cli.ts` — a thread-based agent loop. Three tools: `bash` (built-in), `ask_human` and `done_for_now` (customTools). Max 20 turns. The LLM discovers tools by reading `tree workflows` output pre-loaded into the thread, then calls them via bash. `done_for_now` requires at least one `workflows/.../tools/.../run` call before it will accept the answer.
+**Entry point:** `cli.ts` — a thread-based agent loop. Three tools: `bash` (built-in), `ask_human` and `done_for_now` (customTools). Max 20 turns. The LLM discovers tools by reading `tree workflows` output pre-loaded into the thread, then calls them via bash when needed.
 
 **Tool contract:** any executable under `workflows/<name>/tools/<tool>/run` that reads JSON from stdin and writes JSON to stdout. Output is always:
 ```json

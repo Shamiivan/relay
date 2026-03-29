@@ -53,8 +53,8 @@ Tools:
 
 Rules:
 - NEVER respond with plain text. Every turn MUST end with a tool call.
-- To answer the user: run a workflow tool via bash, then call done_for_now with the result.
-- If tool results are already in the conversation, call done_for_now immediately.
+- Use bash when you need to discover or run workflow tools.
+- If the answer is already clear from the conversation, call done_for_now directly.
 - done_for_now is the ONLY way to complete the task.
 - Read workflow guidance with: cat workflows/<name>/README.md or cat company/workflows/<name>/README.md
 - Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md or cat company/workflows/<name>/tools/<tool>/README.md
@@ -190,7 +190,6 @@ function createDoneForNowTool(
   getActiveSessionId: () => string | null,
   onDone: (message: string) => void,
   abort: () => void,
-  getWorkflowToolCalled: () => boolean,
   onComplete: () => void,
 ): ToolDefinition {
   let called = false;
@@ -198,22 +197,11 @@ function createDoneForNowTool(
     name: "done_for_now",
     label: "Done",
     description:
-      "Call this with the final answer when the task is complete. " +
-      "Only call after running at least one workflow tool " +
-      "((workflows/.../run) or (company/workflows/.../run)) via bash. " +
-      "Do not call from memory or after only running discovery commands.",
+      "Call this with the final answer when the task is complete.",
     parameters: Type.Object({
       message: Type.String({ description: "The final answer to return to the user" }),
     }),
     execute: async (_toolCallId: string, params: { message: string }) => {
-      if (!getWorkflowToolCalled()) {
-        const msg =
-          "ERROR: You must run a workflow tool " +
-          "((workflows/.../tools/.../run) or (company/workflows/.../tools/.../run)) via bash " +
-          "before calling done_for_now. Run the appropriate tool first.";
-        thread.append({ type: "system_note", data: msg });
-        return { content: [{ type: "text", text: msg }], details: null };
-      }
       if (called) return { content: [{ type: "text", text: "Already done." }], details: null };
       called = true;
 
@@ -403,8 +391,6 @@ export async function runRelay(
   };
 
   let completed = false;
-  let workflowToolCalled = false;
-
   for (let turn = 0; turn < maxTurns; turn += 1) {
     let doneMessage: string | null = null;
 
@@ -420,7 +406,6 @@ export async function runRelay(
           getActiveSessionId,
           (msg) => { doneMessage = msg; },
           () => { session.abort(); },
-          () => workflowToolCalled,
           () => { /* onComplete — session already marked done inside the tool */ },
         ),
       ],
@@ -442,7 +427,6 @@ export async function runRelay(
           ? String((event.args as { command: unknown }).command)
           : String(event.args);
         if (WORKFLOW_RUN_PATTERN.test(command)) {
-          workflowToolCalled = true;
           const wfMatch = command.match(/(?:workflows|company\/workflows)\/([^/]+)\/tools/);
           if (wfMatch) {
             lastWorkflowName = wfMatch[1];
