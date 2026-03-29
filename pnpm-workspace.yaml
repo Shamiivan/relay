@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - tasks/*
   - workflows/*/tasks/*
   - workflows/*/tools/*
   - company/workflows/*/tasks/*

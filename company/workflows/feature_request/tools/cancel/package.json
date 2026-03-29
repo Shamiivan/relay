@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-feature-request-cancel",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}

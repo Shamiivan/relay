@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-bug-report-list",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}

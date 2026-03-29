@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+import { readdirSync } from "node:fs";
+import path from "node:path";
+
+const cwd = process.cwd();
+const featureRequestDir = path.join(cwd, "AGENTS", "feature_requests");
+
+try {
+  const reports = readdirSync(featureRequestDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "CONTRACT.md")
+    .map((entry) => ({
+      name: entry.name,
+      path: `AGENTS/feature_requests/${entry.name}`,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  process.stdout.write(JSON.stringify({
+    ok: true,
+    result: {
+      count: reports.length,
+      reports,
+    },
+  }) + "\n");
+} catch (error) {
+  process.stdout.write(JSON.stringify({
+    ok: false,
+    error: {
+      type: "not_found",
+      message: error instanceof Error ? error.message : "Feature request directory not found.",
+    },
+  }) + "\n");
+}
