@@ -1,0 +1,6 @@
+{
+  "name": "@relay/tool-manage-drive-get-file",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "run": "./run" }
+}
