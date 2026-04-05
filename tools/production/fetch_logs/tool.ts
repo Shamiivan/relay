@@ -16,6 +16,7 @@ export const fetchLogsTool = defineTool({
   capability: "read",
   description: "Fetch run logs from the production VM into .production/logs/",
   idempotent: true,
+  prompt: { files: [] },
   input: z.object({}),
   output: z.object({
     copied: z.number().describe("Number of entries copied"),
