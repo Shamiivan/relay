@@ -24,7 +24,11 @@ import type { ThreadEvent } from "./thread.ts";
 import type { TransportAdapter } from "./transport.ts";
 
 // Write current thread events to the session file — called on every append
-function writeSessionEvents(contextDir: string, sessionId: string, events: ThreadEvent[]): void {
+function writeSessionEvents(
+  contextDir: string,
+  sessionId: string,
+  events: ThreadEvent[],
+): void {
   const path = join(contextDir, "in_progress", sessionId, "thread-events.json");
   try {
     writeFileSync(path, JSON.stringify(events), "utf8");
@@ -47,7 +51,7 @@ Working in avantech.
 Your ONLY output mechanism is tool calls — never respond with plain text.
 
 Tools:
-- bash: discover and run workflow tools under workflows/ and company/workflows/
+- bash: discover and run workflow tools under company/workflows/
 - ask_human: ask the user a question — this also saves your progress. When mid-workflow, pass summary, next_steps, and artifacts so context is preserved.
 - done_for_now: deliver your final answer — the human will confirm if we are truly done
 
@@ -56,15 +60,16 @@ Rules:
 - Use bash when you need to discover or run workflow tools.
 - If the answer is already clear from the conversation, call done_for_now directly.
 - done_for_now is the ONLY way to complete the task.
-- Read workflow guidance with: cat workflows/<name>/README.md or cat company/workflows/<name>/README.md
-- Read tool guidance with: cat workflows/<name>/tools/<tool>/README.md or cat company/workflows/<name>/tools/<tool>/README.md
+- Read workflow guidance with: cat company/workflows/<name>/README.md
+- Read tool guidance with: cat company/workflows/<name>/tools/<tool>/README.md
 - When the correct tool or arguments are not obvious, read the relevant README before running the tool.
 - On startup: if a system_note lists prior paused sessions, review them before acting on the user message.
 
-Run tools with: printf '<json>' | workflows/<name>/tools/<tool>/run or printf '<json>' | company/workflows/<name>/tools/<tool>/run`;
+Run tools with: printf '<json>' | company/workflows/<name>/tools/<tool>/run`;
 
 const DEBUG_THREAD = process.env.DEBUG_THREAD === "1";
-const WORKFLOW_RUN_PATTERN = /(?:^|[^/])(workflows|company\/workflows)\/.*\/tools\/.*\/run/;
+const WORKFLOW_RUN_PATTERN =
+  /(?:^|[^/])(workflows|company\/workflows)\/.*\/tools\/.*\/run/;
 
 // Commands matching these patterns require human approval before running
 const DESTRUCTIVE_PATTERNS = [
@@ -80,7 +85,11 @@ const MAX_TURNS = 50;
 
 function createMinimalResourceLoader(): ResourceLoader {
   return {
-    getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+    getExtensions: () => ({
+      extensions: [],
+      errors: [],
+      runtime: createExtensionRuntime(),
+    }),
     getSkills: () => ({ skills: [], diagnostics: [] }),
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
@@ -88,16 +97,24 @@ function createMinimalResourceLoader(): ResourceLoader {
     getSystemPrompt: () => CONTRACT,
     getAppendSystemPrompt: () => [],
     getPathMetadata: () => new Map(),
-    extendResources: () => { },
-    reload: async () => { },
+    extendResources: () => {},
+    reload: async () => {},
   };
 }
 
 function extractResultText(result: unknown): string {
   if (typeof result === "string") return result;
-  if (typeof result === "object" && result !== null && "content" in result && Array.isArray((result as { content: unknown }).content)) {
-    return ((result as { content: unknown[] }).content)
-      .filter((item): item is { type: string; text: string } => typeof item === "object" && item !== null && "text" in item)
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "content" in result &&
+    Array.isArray((result as { content: unknown }).content)
+  ) {
+    return (result as { content: unknown[] }).content
+      .filter(
+        (item): item is { type: string; text: string } =>
+          typeof item === "object" && item !== null && "text" in item,
+      )
       .map((item) => item.text)
       .join("");
   }
@@ -106,7 +123,7 @@ function extractResultText(result: unknown): string {
       .map((item) =>
         typeof item === "object" && item !== null && "text" in item
           ? String((item as { text: unknown }).text)
-          : JSON.stringify(item)
+          : JSON.stringify(item),
       )
       .join("");
   }
@@ -134,8 +151,12 @@ function createAskHumanTool(
       "Pass summary, next_steps, and artifacts when mid-workflow so context is preserved.",
     parameters: Type.Object({
       question: Type.String({ description: "The question to ask the user" }),
-      summary: Type.Optional(Type.String({ description: "Summary of work done so far" })),
-      next_steps: Type.Optional(Type.Array(Type.String(), { description: "Planned next steps" })),
+      summary: Type.Optional(
+        Type.String({ description: "Summary of work done so far" }),
+      ),
+      next_steps: Type.Optional(
+        Type.Array(Type.String(), { description: "Planned next steps" }),
+      ),
       artifacts: Type.Optional(
         Type.Array(
           Type.Object({
@@ -145,7 +166,9 @@ function createAskHumanTool(
           { description: "Relevant artifacts produced so far" },
         ),
       ),
-      last_action: Type.Optional(Type.String({ description: "The last action taken" })),
+      last_action: Type.Optional(
+        Type.String({ description: "The last action taken" }),
+      ),
     }),
     execute: async (
       _toolCallId: string,
@@ -157,7 +180,10 @@ function createAskHumanTool(
         last_action?: string;
       },
     ) => {
-      thread.append({ type: "request_human_clarification", data: { prompt: params.question } });
+      thread.append({
+        type: "request_human_clarification",
+        data: { prompt: params.question },
+      });
 
       const sessionId = getActiveSessionId();
       if (sessionId) {
@@ -196,13 +222,18 @@ function createDoneForNowTool(
   return {
     name: "done_for_now",
     label: "Done",
-    description:
-      "Call this with the final answer when the task is complete.",
+    description: "Call this with the final answer when the task is complete.",
     parameters: Type.Object({
-      message: Type.String({ description: "The final answer to return to the user" }),
+      message: Type.String({
+        description: "The final answer to return to the user",
+      }),
     }),
     execute: async (_toolCallId: string, params: { message: string }) => {
-      if (called) return { content: [{ type: "text", text: "Already done." }], details: null };
+      if (called)
+        return {
+          content: [{ type: "text", text: "Already done." }],
+          details: null,
+        };
       called = true;
 
       // Transition to paused with proposed_final while we wait for confirmation
@@ -229,7 +260,10 @@ function createDoneForNowTool(
         onDone(params.message);
         onComplete();
         abort();
-        return { content: [{ type: "text", text: "Answer delivered." }], details: null };
+        return {
+          content: [{ type: "text", text: "Answer delivered." }],
+          details: null,
+        };
       }
 
       // Not accepted — reset called so done_for_now can be called again
@@ -267,10 +301,19 @@ function createApprovalGateBashTool(
           verdict = "denied";
         }
         if (verdict !== "approved") {
-          thread.append({ type: "system_note", data: "User declined the destructive operation. Do not retry it." });
-          return { content: [{ type: "text", text: "Operation cancelled by user." }], details: null };
+          thread.append({
+            type: "system_note",
+            data: "User declined the destructive operation. Do not retry it.",
+          });
+          return {
+            content: [{ type: "text", text: "Operation cancelled by user." }],
+            details: null,
+          };
         }
-        thread.append({ type: "system_note", data: "User approved the destructive operation." });
+        thread.append({
+          type: "system_note",
+          data: "User approved the destructive operation.",
+        });
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return originalExecute(args as any, context as any);
@@ -326,8 +369,9 @@ export async function runRelay(
         initialUserMessage: message,
       };
 
-  let activeSessionId: string = options.resumedSession?.id
-    ?? checkpointContext(contextDir, sessionMeta, "[]");
+  let activeSessionId: string =
+    options.resumedSession?.id ??
+    checkpointContext(contextDir, sessionMeta, "[]");
 
   /** Getter so tool closures always read the current value. */
   const getActiveSessionId = () => activeSessionId;
@@ -337,7 +381,10 @@ export async function runRelay(
     try {
       return execSync(discoveryCommand, { cwd, encoding: "utf8" });
     } catch {
-      return execSync("find workflows company/ -name run | sort", { cwd, encoding: "utf8" });
+      return execSync("find company/workflows -name run | sort", {
+        cwd,
+        encoding: "utf8",
+      });
     }
   })();
 
@@ -351,8 +398,14 @@ export async function runRelay(
       ]
     : [
         { type: "system_note", data: CONTRACT },
-        { type: "executable_call", data: { executableName: "bash", args: discoveryCommand } },
-        { type: "executable_result", data: { executableName: "bash", result: discoveryResult } },
+        {
+          type: "executable_call",
+          data: { executableName: "bash", args: discoveryCommand },
+        },
+        {
+          type: "executable_result",
+          data: { executableName: "bash", result: discoveryResult },
+        },
         { type: "user_message", data: message },
       ];
 
@@ -365,7 +418,10 @@ export async function runRelay(
       const note =
         "Paused sessions for this workflow:\n" +
         pausedSessions
-          .map((s) => `- ${s.id}: awaiting "${s.meta.handoff?.awaiting ?? "unknown"}"`)
+          .map(
+            (s) =>
+              `- ${s.id}: awaiting "${s.meta.handoff?.awaiting ?? "unknown"}"`,
+          )
           .join("\n");
       initialEvents.push({ type: "system_note", data: note });
     }
@@ -382,10 +438,10 @@ export async function runRelay(
   thread.append = (event: ThreadEvent) => {
     _append(event);
     if (DEBUG_THREAD) {
-      console.error(thread.serializeForLLM());
+      console.log(thread.serializeForLLM());
     }
     // Fire-and-forget — transport decides whether to display
-    transport.publishEvent(event).catch(() => { });
+    transport.publishEvent(event).catch(() => {});
     writeSessionEvents(contextDir, activeSessionId, thread.events);
     writeRunLog(runLogPath, thread.serializeForLLM());
   };
@@ -404,43 +460,79 @@ export async function runRelay(
           transport,
           contextDir,
           getActiveSessionId,
-          (msg) => { doneMessage = msg; },
-          () => { session.abort(); },
-          () => { /* onComplete — session already marked done inside the tool */ },
+          (msg) => {
+            doneMessage = msg;
+          },
+          () => {
+            session.abort();
+          },
+          () => {
+            /* onComplete — session already marked done inside the tool */
+          },
         ),
       ],
       sessionManager: SessionManager.inMemory(),
     });
 
     if (modelFallbackMessage && turn === 0) {
-      await transport.publishEvent({ type: "system_note", data: modelFallbackMessage });
+      await transport.publishEvent({
+        type: "system_note",
+        data: modelFallbackMessage,
+      });
     }
 
     const unsubscribe = session.subscribe((event) => {
       if (DEBUG_THREAD) {
-        console.log("==================================================================================================")
+        console.log(
+          "==================================================================================================",
+        );
         console.log("Event:", event);
-        console.log("==================================================================================================")
+        console.log(
+          "==================================================================================================",
+        );
       }
       if (event.type === "tool_execution_start" && event.toolName === "bash") {
-        const command = typeof event.args === "object" && event.args !== null && "command" in event.args
-          ? String((event.args as { command: unknown }).command)
-          : String(event.args);
+        const command =
+          typeof event.args === "object" &&
+          event.args !== null &&
+          "command" in event.args
+            ? String((event.args as { command: unknown }).command)
+            : String(event.args);
         if (WORKFLOW_RUN_PATTERN.test(command)) {
-          const wfMatch = command.match(/(?:workflows|company\/workflows)\/([^/]+)\/tools/);
+          const wfMatch = command.match(
+            /(?:workflows|company\/workflows)\/([^/]+)\/tools/,
+          );
           if (wfMatch) {
             lastWorkflowName = wfMatch[1];
             if (sessionMeta.workflow === "unknown") {
               sessionMeta.workflow = lastWorkflowName;
               // Patch meta.json immediately so disk is always current
-              const metaPath = join(contextDir, "in_progress", activeSessionId, "meta.json");
+              const metaPath = join(
+                contextDir,
+                "in_progress",
+                activeSessionId,
+                "meta.json",
+              );
               try {
-                writeFileSync(metaPath, JSON.stringify({ ...sessionMeta, updatedAt: new Date().toISOString() }, null, 2), "utf8");
-              } catch { /* best-effort */ }
+                writeFileSync(
+                  metaPath,
+                  JSON.stringify(
+                    { ...sessionMeta, updatedAt: new Date().toISOString() },
+                    null,
+                    2,
+                  ),
+                  "utf8",
+                );
+              } catch {
+                /* best-effort */
+              }
             }
           }
         }
-        thread.append({ type: "executable_call", data: { executableName: "bash", args: command } });
+        thread.append({
+          type: "executable_call",
+          data: { executableName: "bash", args: command },
+        });
       }
 
       if (event.type === "tool_execution_end" && event.toolName === "bash") {
