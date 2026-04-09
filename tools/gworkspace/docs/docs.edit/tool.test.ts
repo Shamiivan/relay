@@ -78,6 +78,84 @@ function createFakeClient(initialText: string) {
   return { client, batchCalls, getText: () => text };
 }
 
+function createTabbedDocument(tabs: Array<{ tabId: string; text: string; title?: string }>) {
+  return {
+    documentId: "doc-1",
+    title: "Working Doc",
+    tabs: tabs.map((tab) => ({
+      tabProperties: {
+        tabId: tab.tabId,
+        title: tab.title ?? tab.tabId,
+      },
+      documentTab: {
+        body: {
+          content: [{
+            endIndex: tab.text.length + 1,
+            paragraph: {
+              elements: [{
+                textRun: { content: tab.text },
+              }],
+            },
+          }],
+        },
+      },
+    })),
+  };
+}
+
+function createFakeTabbedClient(initialTabs: Array<{ tabId: string; text: string; title?: string }>) {
+  const batchCalls: Record<string, unknown>[] = [];
+  const getCalls: Record<string, unknown>[] = [];
+  const tabs = new Map(initialTabs.map((tab) => [tab.tabId, { ...tab }]));
+
+  const client = {
+    documents: {
+      async get(args: Record<string, unknown>) {
+        getCalls.push(args);
+        return {
+          data: createTabbedDocument(Array.from(tabs.values())),
+        };
+      },
+      async batchUpdate(args: Record<string, unknown>) {
+        batchCalls.push(args);
+        const requests = (((args.requestBody as Record<string, unknown> | undefined)?.requests) ?? []) as Array<Record<string, unknown>>;
+
+        for (const request of requests) {
+          if (request.deleteContentRange) {
+            const range = (request.deleteContentRange as { range?: { startIndex?: number; endIndex?: number; tabId?: string } }).range ?? {};
+            const tab = tabs.get(range.tabId ?? "");
+            if (!tab) {
+              continue;
+            }
+            const start = (range.startIndex ?? 1) - 1;
+            const end = (range.endIndex ?? 1) - 1;
+            tab.text = tab.text.slice(0, start) + tab.text.slice(end);
+          }
+
+          if (request.insertText) {
+            const insertText = request.insertText as { location?: { index?: number; tabId?: string }; text?: string };
+            const tab = tabs.get(insertText.location?.tabId ?? "");
+            if (!tab) {
+              continue;
+            }
+            const index = (insertText.location?.index ?? 1) - 1;
+            tab.text = tab.text.slice(0, index) + (insertText.text ?? "") + tab.text.slice(index);
+          }
+        }
+
+        return { data: {} };
+      },
+    },
+  } as unknown as DocsClient;
+
+  return {
+    client,
+    batchCalls,
+    getCalls,
+    getTabText: (tabId: string) => tabs.get(tabId)?.text,
+  };
+}
+
 test("buildRequestsForOperation replaces the first text match surgically", () => {
   const requests = buildRequestsForOperation({
     op: "replaceText",
@@ -113,6 +191,21 @@ test("buildRequestsForOperation inserts text after an anchor", () => {
   assert.deepEqual(requests, [{
     insertText: {
       location: { index: 6 },
+      text: " final",
+    },
+  }]);
+});
+
+test("buildRequestsForOperation stamps tabId on scoped requests", () => {
+  const requests = buildRequestsForOperation({
+    op: "insertText",
+    text: " final",
+    location: { kind: "afterText", text: "Board", occurrence: 1, matchCase: true },
+  }, createDocument("Board update\n"), "t.board");
+
+  assert.deepEqual(requests, [{
+    insertText: {
+      location: { index: 6, tabId: "t.board" },
       text: " final",
     },
   }]);
@@ -194,6 +287,37 @@ test("editDocument applies operations in order", async () => {
   assert.equal(fake.batchCalls.length, 2);
 });
 
+test("editDocument targets the requested tab", async () => {
+  const fake = createFakeTabbedClient([
+    { tabId: "t.default", text: "Default tab\n" },
+    { tabId: "t.board", text: "Board draft\n" },
+  ]);
+
+  const result = await editDocument({
+    documentId: "doc-1",
+    tabId: "t.board",
+    operations: [{
+      op: "replaceText",
+      target: { kind: "text", text: "draft", occurrence: 1, matchCase: true },
+      replacement: "final",
+      replaceAll: false,
+    }],
+  }, {
+    client: fake.client,
+  });
+
+  assert.equal(result.text, "Board final\n");
+  assert.equal(fake.getTabText("t.default"), "Default tab\n");
+  assert.equal(fake.getTabText("t.board"), "Board final\n");
+  assert.equal(fake.getCalls[0]?.includeTabsContent, true);
+  assert.equal(
+    ((((fake.batchCalls[0]?.requestBody as Record<string, unknown>)?.requests as Array<Record<string, unknown>>)[0]?.deleteContentRange as {
+      range?: { tabId?: string };
+    })?.range?.tabId),
+    "t.board",
+  );
+});
+
 test("onError maps ZodError to validation", () => {
   const error = new z.ZodError([{
     code: "custom",
@@ -211,6 +335,13 @@ test("onError maps auth errors to auth_error", () => {
   assert.deepEqual(
     docsEditTool.onError?.(new Error("invalid_grant: Token has been expired")),
     { type: "auth_error", message: "invalid_grant: Token has been expired" },
+  );
+});
+
+test("onError maps missing tab errors to not_found", () => {
+  assert.deepEqual(
+    docsEditTool.onError?.(new Error("Tab not found: t.board")),
+    { type: "not_found", message: "Tab not found: t.board", field: "tabId" },
   );
 });
 

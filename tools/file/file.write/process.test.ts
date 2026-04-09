@@ -127,3 +127,29 @@ test("file.write: executable returns explicit error envelopes", {
     },
   });
 });
+
+test("file.write: executable accepts piped JSON with literal newlines inside string values", {
+  skip: !subprocessExecutionAvailable,
+}, async () => {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "relay-file-write-raw-json-"));
+  const rawInput = '{ "path": "artifacts/offer.md", "content": "hello\nworld\n", "mode": "create" }\n';
+
+  const result = spawnSync(
+    process.execPath,
+    ["--import", tsxLoaderPath, toolPath],
+    {
+      cwd: workspaceRoot,
+      env: process.env,
+      encoding: "utf8",
+      input: rawInput,
+    },
+  );
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  assert.equal(result.status, 0);
+  assert.equal(await readFile(path.join(workspaceRoot, "artifacts/offer.md"), "utf8"), "hello\nworld\n");
+  assert.equal(JSON.parse(result.stdout).ok, true);
+});

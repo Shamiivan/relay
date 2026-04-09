@@ -11,6 +11,7 @@ Prefer `docs.edit` when you need to:
 Operational guidance:
 - Use `drive.search` first when you need to find the document id.
 - Use `docs.read` before editing when you need the current wording to target exact text safely.
+- When the user gives a Google Docs tab URL or tab id, pass it as `tabId` so the edit is scoped to that tab instead of the default first tab.
 - Prefer exact text anchors over raw index ranges unless you already know the Docs indexes.
 - Keep operations narrow and ordered. Later operations run after earlier ones.
 - Use `docs.write` only when the user explicitly wants to replace the full document body.
@@ -20,6 +21,7 @@ Example:
 ```json
 {
   "documentId": "1AbCdEf",
+  "tabId": "t.dhx43q2fmmbo",
   "operations": [
     {
       "op": "replaceText",

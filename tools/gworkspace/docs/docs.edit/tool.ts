@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getGoogleAuth } from "../../../lib/google-auth";
 import { defineTool, promptFile, runDeclaredTool } from "../../../sdk";
 import type { ToolErrorInfo } from "../../../sdk";
+import { resolveRequestedTab } from "../shared/tabs";
 
 export type DocsClient = docs_v1.Docs;
 type DocsDocument = docs_v1.Schema$Document;
@@ -275,6 +276,9 @@ function mapDocsEditError(error: unknown): ToolErrorInfo {
   }
 
   if (error instanceof Error) {
+    if (/tab not found/i.test(error.message)) {
+      return { type: "not_found", message: error.message, field: "tabId" };
+    }
     if (/target text not found|insert anchor not found/i.test(error.message)) {
       const field = /insert anchor not found/i.test(error.message) ? "location.text" : "target.text";
       return { type: "target_not_found", message: error.message, field };
@@ -432,9 +436,14 @@ function buildParagraphStyle(
   return { paragraphStyle: result, fields: fields.join(",") };
 }
 
+function withOptionalTabId<T extends object>(value: T, tabId?: string): T & { tabId?: string } {
+  return tabId ? { ...value, tabId } : value;
+}
+
 export function buildRequestsForOperation(
   operation: DocsEditOperation,
   document: DocsDocument,
+  tabId?: string,
 ): DocsRequest[] {
   const bodyText = extractDocumentText(document);
   const documentEndIndex = getDocumentEndIndex(document);
@@ -456,6 +465,7 @@ export function buildRequestsForOperation(
               matchCase: target.matchCase,
             },
             replaceText: operation.replacement,
+            tabsCriteria: tabId ? { tabIds: [tabId] } : undefined,
           },
         }];
       }
@@ -463,7 +473,7 @@ export function buildRequestsForOperation(
       return buildRequestsForOperation({
         op: "deleteText",
         target: operation.target,
-      }, document).concat(
+      }, document, tabId).concat(
         buildRequestsForOperation({
           op: "insertText",
           text: operation.replacement,
@@ -475,13 +485,13 @@ export function buildRequestsForOperation(
               occurrence: operation.target.occurrence,
               matchCase: operation.target.matchCase,
             },
-        }, document),
+        }, document, tabId),
       );
     case "insertText": {
       const index = resolveInsertIndex(operation.location, bodyText, documentEndIndex);
       return [{
         insertText: {
-          location: { index },
+          location: withOptionalTabId({ index }, tabId),
           text: operation.text,
         },
       }];
@@ -490,7 +500,7 @@ export function buildRequestsForOperation(
       const range = resolveRange(operation.target, bodyText);
       return [{
         deleteContentRange: {
-          range,
+          range: withOptionalTabId(range, tabId),
         },
       }];
     }
@@ -499,7 +509,7 @@ export function buildRequestsForOperation(
       const style = buildTextStyle(operation.textStyle);
       return [{
         updateTextStyle: {
-          range,
+          range: withOptionalTabId(range, tabId),
           textStyle: style.textStyle,
           fields: style.fields,
         },
@@ -510,7 +520,7 @@ export function buildRequestsForOperation(
       const style = buildParagraphStyle(operation.paragraphStyle);
       return [{
         updateParagraphStyle: {
-          range,
+          range: withOptionalTabId(range, tabId),
           paragraphStyle: style.paragraphStyle,
           fields: style.fields,
         },
@@ -520,7 +530,7 @@ export function buildRequestsForOperation(
       const range = resolveRange(operation.target, bodyText);
       return [{
         createParagraphBullets: {
-          range,
+          range: withOptionalTabId(range, tabId),
           bulletPreset: operation.bulletPreset,
         },
       }];
@@ -529,7 +539,7 @@ export function buildRequestsForOperation(
       const range = resolveRange(operation.target, bodyText);
       return [{
         deleteParagraphBullets: {
-          range,
+          range: withOptionalTabId(range, tabId),
         },
       }];
     }
@@ -540,14 +550,20 @@ export async function editDocument(
   input: {
     documentId: string;
     operations: DocsEditOperation[];
+    tabId?: string;
   },
   opts: { client: DocsClient },
 ) {
   for (const operation of input.operations) {
     const documentResponse = await opts.client.documents.get({
       documentId: input.documentId,
+      includeTabsContent: Boolean(input.tabId),
     });
-    const requests = buildRequestsForOperation(operation, documentResponse.data);
+    const tab = resolveRequestedTab(documentResponse.data, input.tabId);
+    const requests = buildRequestsForOperation(operation, {
+      ...documentResponse.data,
+      body: tab.body,
+    }, tab.tabId);
 
     await opts.client.documents.batchUpdate({
       documentId: input.documentId,
@@ -559,12 +575,17 @@ export async function editDocument(
 
   const updatedDocument = await opts.client.documents.get({
     documentId: input.documentId,
+    includeTabsContent: Boolean(input.tabId),
   });
+  const resolvedUpdatedTab = resolveRequestedTab(updatedDocument.data, input.tabId);
 
   return {
     documentId: updatedDocument.data.documentId ?? input.documentId,
     title: updatedDocument.data.title ?? "",
-    text: extractDocumentText(updatedDocument.data),
+    text: extractDocumentText({
+      ...updatedDocument.data,
+      body: resolvedUpdatedTab.body,
+    }),
     appliedOperations: input.operations.length,
     updated: true,
   };
@@ -580,6 +601,7 @@ export const docsEditTool = defineTool({
   updateMode: "granular",
   input: z.object({
     documentId: z.string().min(1).describe("The Google Docs document id."),
+    tabId: z.string().min(1).optional().describe("Optional tab id to target within a multi-tab Google Doc."),
     operations: z.array(docsEditOperationSchema).min(1).describe(
       "Ordered edit operations. Use exact text targets for surgical edits, or explicit index ranges when you already know them.",
     ),
