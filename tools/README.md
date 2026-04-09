@@ -19,6 +19,7 @@ Examples:
 - `tools/gworkspace/gmail/gmail.search`
 - `tools/gworkspace/drive/drive.search`
 - `tools/gworkspace/docs/docs.read`
+- `tools/gworkspace/docs/docs.edit`
 - `tools/gworkspace/docs/docs.write`
 - `tools/gworkspace/gsheets/gsheets.readValues`
 - `tools/gworkspace/gsheets/gsheets.appendRow`

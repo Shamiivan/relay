@@ -1,6 +1,6 @@
 # Relay
 
-Relay is a narrow workspace agent built one use case at a time. The current tool set covers Gmail for email access, Google Drive for file lookup, and Google Sheets for spreadsheet reads and row appends.
+Relay is a narrow workspace agent built one use case at a time. The current tool set covers Gmail for email access, Google Drive for file lookup, Google Docs for reading and editing documents, and Google Sheets for spreadsheet reads and row appends.
 Strong typing is a project rule: parse inputs at the boundary, keep result shapes explicit, and avoid `any` or loose records in core paths.
 Persistence runs through Convex, and machine-owned config lives in JSON.
 Execution happens in a local worker process, while Convex stores sessions, session messages, runs, run steps, tool calls, and runtime events in `/convex`.

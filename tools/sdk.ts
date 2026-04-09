@@ -47,7 +47,14 @@ export type ToolHandler<
   input: z.output<TInput>;
 }) => Promise<z.input<TOutput> | z.output<TOutput>> | z.input<TOutput> | z.output<TOutput>;
 
-export type ToolErrorInfo = { type: string; message?: string };
+export type ToolErrorInfo = {
+  type: string;
+  message?: string;
+  field?: string;
+  reason?: string;
+  retryAfterMs?: number;
+  id?: string;
+};
 
 export type ToolErrorHandler = (
   error: unknown,
