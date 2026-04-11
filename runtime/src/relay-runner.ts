@@ -61,24 +61,25 @@ Rules:
 - If the answer is already clear from the conversation, call done_for_now directly.
 - done_for_now is the ONLY way to complete the task.
 - Read workflow guidance with: cat company/workflows/<name>/README.md
-- Read tool guidance with: cat company/workflows/<name>/tools/<tool>/README.md
+- Read tool guidance with: cat company/workflows/<name>/tools/<tool>/README.md when that path exists
 - When the correct tool or arguments are not obvious, read the relevant README before running the tool.
 - On startup: if a system_note lists prior paused sessions, review them before acting on the user message.
 
-Run tools with: printf '<json>' | company/workflows/<name>/tools/<tool>/run`;
+Run tools with: printf '<json>' | company/workflows/<name>/tools/<tool>
+If the tool is a directory rather than an executable file, append /run. Prefer the direct executable path when both exist.`;
 
 const DEBUG_THREAD = process.env.DEBUG_THREAD === "1";
-const WORKFLOW_RUN_PATTERN =
-  /(?:^|[^/])(workflows|company\/workflows)\/.*\/tools\/.*\/run/;
+const WORKFLOW_TOOL_PATTERN =
+  /(?:^|[^/])(?:workflows|company\/workflows)\/([^/\s]+)\/tools\/([^/\s]+)(?:\/run)?(?=\s|$|["'])/;
 
 // Commands matching these patterns require human approval before running
 const DESTRUCTIVE_PATTERNS = [
-  /(?:workflows|company\/workflows)\/.*\/tools\/docs\.write\/run/,
-  /(?:workflows|company\/workflows)\/.*\/tools\/drive\.copy\/run/,
-  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.contact\.bulkCreate\/run/,
-  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.contact\.bulkUpdate\/run/,
-  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.account\.bulkCreate\/run/,
-  /(?:workflows|company\/workflows)\/.*\/tools\/apollo\.field\.create\/run/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/docs\.write(?:\/run)?(?=\s|$|["'])/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/drive\.copy(?:\/run)?(?=\s|$|["'])/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/apollo\.contact\.bulkCreate(?:\/run)?(?=\s|$|["'])/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/apollo\.contact\.bulkUpdate(?:\/run)?(?=\s|$|["'])/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/apollo\.account\.bulkCreate(?:\/run)?(?=\s|$|["'])/,
+  /(?:workflows|company\/workflows)\/[^/\s]+\/tools\/apollo\.field\.create(?:\/run)?(?=\s|$|["'])/,
 ];
 
 const MAX_TURNS = 50;
@@ -103,31 +104,40 @@ function createMinimalResourceLoader(): ResourceLoader {
 }
 
 function extractResultText(result: unknown): string {
-  if (typeof result === "string") return result;
+  const sanitize = (text: string): string =>
+    text
+      .replace(
+        /\(node:\d+\) \[DEP0040\] DeprecationWarning: The `punycode` module is deprecated\. Please use a userland alternative instead\.\n(?:\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)\n)?/g,
+        "",
+      )
+      .replace(/Both GOOGLE_API_KEY and GEMINI_API_KEY are set\. Using GOOGLE_API_KEY\.\n?/g, "")
+      .trim();
+
+  if (typeof result === "string") return sanitize(result);
   if (
     typeof result === "object" &&
     result !== null &&
     "content" in result &&
     Array.isArray((result as { content: unknown }).content)
   ) {
-    return (result as { content: unknown[] }).content
+    return sanitize((result as { content: unknown[] }).content
       .filter(
         (item): item is { type: string; text: string } =>
           typeof item === "object" && item !== null && "text" in item,
       )
       .map((item) => item.text)
-      .join("");
+      .join(""));
   }
   if (Array.isArray(result)) {
-    return result
+    return sanitize(result
       .map((item) =>
         typeof item === "object" && item !== null && "text" in item
           ? String((item as { text: unknown }).text)
           : JSON.stringify(item),
       )
-      .join("");
+      .join(""));
   }
-  return JSON.stringify(result, null, 2);
+  return sanitize(JSON.stringify(result, null, 2));
 }
 
 /**
@@ -281,7 +291,16 @@ function createApprovalGateBashTool(
   thread: Thread,
   transport: TransportAdapter,
 ): ReturnType<typeof createBashTool> {
-  const tool = createBashTool(cwd);
+  const tool = createBashTool(cwd, {
+    spawnHook: (context) => ({
+      ...context,
+      env: {
+        ...context.env,
+        NODE_NO_WARNINGS: "1",
+        DOTENV_CONFIG_QUIET: "true",
+      },
+    }),
+  });
   const originalExecute = tool.execute;
   return {
     ...tool,
@@ -498,34 +517,30 @@ export async function runRelay(
           "command" in event.args
             ? String((event.args as { command: unknown }).command)
             : String(event.args);
-        if (WORKFLOW_RUN_PATTERN.test(command)) {
-          const wfMatch = command.match(
-            /(?:workflows|company\/workflows)\/([^/]+)\/tools/,
-          );
-          if (wfMatch) {
-            lastWorkflowName = wfMatch[1];
-            if (sessionMeta.workflow === "unknown") {
-              sessionMeta.workflow = lastWorkflowName;
-              // Patch meta.json immediately so disk is always current
-              const metaPath = join(
-                contextDir,
-                "in_progress",
-                activeSessionId,
-                "meta.json",
+        const wfMatch = command.match(WORKFLOW_TOOL_PATTERN);
+        if (wfMatch) {
+          lastWorkflowName = wfMatch[1]!;
+          if (sessionMeta.workflow === "unknown") {
+            sessionMeta.workflow = lastWorkflowName;
+            // Patch meta.json immediately so disk is always current
+            const metaPath = join(
+              contextDir,
+              "in_progress",
+              activeSessionId,
+              "meta.json",
+            );
+            try {
+              writeFileSync(
+                metaPath,
+                JSON.stringify(
+                  { ...sessionMeta, updatedAt: new Date().toISOString() },
+                  null,
+                  2,
+                ),
+                "utf8",
               );
-              try {
-                writeFileSync(
-                  metaPath,
-                  JSON.stringify(
-                    { ...sessionMeta, updatedAt: new Date().toISOString() },
-                    null,
-                    2,
-                  ),
-                  "utf8",
-                );
-              } catch {
-                /* best-effort */
-              }
+            } catch {
+              /* best-effort */
             }
           }
         }

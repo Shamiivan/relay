@@ -1,12 +1,13 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env -S node --import tsx
 import { createInterface } from "node:readline/promises";
 import { config } from "dotenv";
 import { createCliTransport } from "./transports/cli.ts";
+import { createTuiTransport, shouldUseTui, TuiTransport } from "./transports/tui.ts";
 import { runRelay } from "./runtime/src/relay-runner.ts";
 import { checkpointContext, listContexts, readContext } from "./runtime/src/context-store.ts";
 import type { ThreadEvent } from "./runtime/src/thread.ts";
 
-config({ path: new URL(".env.local", import.meta.url).pathname });
+config({ path: new URL(".env.local", import.meta.url).pathname, quiet: true });
 
 const [subcommand, ...rest] = process.argv.slice(2);
 
@@ -72,16 +73,36 @@ if (subcommand === "resume") {
   const { meta, eventsJson } = readContext(".contexts", sessionId);
   const events = JSON.parse(eventsJson) as ThreadEvent[];
 
-  // Show the awaiting question and collect the user's answer
   const awaiting = meta.handoff?.awaiting ?? "What would you like to do next?";
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const humanResponse = (await rl.question(`${awaiting}\n> `)).trim();
-  rl.close();
+  const transport = shouldUseTui() ? createTuiTransport() : createCliTransport();
+  try {
+    const humanResponse = transport instanceof TuiTransport
+      ? await (async () => {
+          transport.preloadHistory(events);
+          await transport.publishEvent({
+            type: "request_human_clarification",
+            data: { prompt: awaiting },
+          });
+          return transport.promptForClarification(awaiting);
+        })()
+      : await (async () => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          try {
+            return (await rl.question(`${awaiting}\n> `)).trim();
+          } finally {
+            rl.close();
+          }
+        })();
 
-  await runRelay(awaiting, createCliTransport(), {
-    resumedSession: { id: sessionId, events, meta, humanResponse },
-  });
-  process.exit(0);
+    await runRelay(awaiting, transport, {
+      resumedSession: { id: sessionId, events, meta, humanResponse },
+    });
+    process.exit(0);
+  } finally {
+    if (transport instanceof TuiTransport && !transport.isClosed()) {
+      await transport.close();
+    }
+  }
 }
 
 const message = [subcommand, ...rest].filter(Boolean).join(" ").trim();
@@ -95,4 +116,11 @@ if (!message) {
   process.exit(1);
 }
 
-await runRelay(message, createCliTransport());
+const transport = shouldUseTui() ? createTuiTransport() : createCliTransport();
+try {
+  await runRelay(message, transport);
+} finally {
+  if (transport instanceof TuiTransport && !transport.isClosed()) {
+    await transport.close();
+  }
+}
