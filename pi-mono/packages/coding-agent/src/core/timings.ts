@@ -23,3 +23,32 @@ export function printTimings(): void {
 	console.error(`  TOTAL: ${timings.reduce((a, b) => a + b.ms, 0)}ms`);
 	console.error("------------------------\n");
 }
+
+export function createPhaseTimer(scope: string): {
+	step(label: string): void;
+	end(): void;
+} {
+	if (!ENABLED) {
+		return {
+			step() {},
+			end() {},
+		};
+	}
+
+	const startedAt = Date.now();
+	let lastStepAt = startedAt;
+	const entries: Array<{ label: string; ms: number }> = [];
+
+	return {
+		step(label: string) {
+			const now = Date.now();
+			entries.push({ label, ms: now - lastStepAt });
+			lastStepAt = now;
+		},
+		end() {
+			const total = Date.now() - startedAt;
+			const details = entries.map((entry) => `${entry.label}=${entry.ms}ms`).join(", ");
+			console.error(`[timing:${scope}] total=${total}ms${details ? ` | ${details}` : ""}`);
+		},
+	};
+}

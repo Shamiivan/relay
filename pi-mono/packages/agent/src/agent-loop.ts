@@ -21,6 +21,35 @@ import type {
 	StreamFn,
 } from "./types.js";
 
+function createPhaseTimer(scope: string): {
+	step(label: string): void;
+	end(): void;
+} {
+	if (process.env.PI_TIMING !== "1") {
+		return {
+			step() {},
+			end() {},
+		};
+	}
+
+	const startedAt = Date.now();
+	let lastStepAt = startedAt;
+	const entries: Array<{ label: string; ms: number }> = [];
+
+	return {
+		step(label: string) {
+			const now = Date.now();
+			entries.push({ label, ms: now - lastStepAt });
+			lastStepAt = now;
+		},
+		end() {
+			const total = Date.now() - startedAt;
+			const details = entries.map((entry) => `${entry.label}=${entry.ms}ms`).join(", ");
+			console.error(`[timing:${scope}] total=${total}ms${details ? ` | ${details}` : ""}`);
+		},
+	};
+}
+
 /**
  * Start an agent loop with a new prompt message.
  * The prompt is added to the context and events are emitted for it.
@@ -208,14 +237,17 @@ async function streamAssistantResponse(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	streamFn?: StreamFn,
 ): Promise<AssistantMessage> {
+	const timer = createPhaseTimer("agent.streamAssistantResponse");
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
 	if (config.transformContext) {
 		messages = await config.transformContext(messages, signal);
 	}
+	timer.step("transform-context");
 
 	// Convert to LLM-compatible messages (AgentMessage[] → Message[])
 	const llmMessages = await config.convertToLlm(messages);
+	timer.step("convert-to-llm");
 
 	// Build LLM context
 	const llmContext: Context = {
@@ -229,12 +261,14 @@ async function streamAssistantResponse(
 	// Resolve API key (important for expiring tokens)
 	const resolvedApiKey =
 		(config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+	timer.step("resolve-api-key");
 
 	const response = await streamFunction(config.model, llmContext, {
 		...config,
 		apiKey: resolvedApiKey,
 		signal,
 	});
+	timer.step("start-provider-stream");
 
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
@@ -242,6 +276,8 @@ async function streamAssistantResponse(
 	for await (const event of response) {
 		switch (event.type) {
 			case "start":
+				timer.step("first-stream-event");
+				timer.end();
 				partialMessage = event.partial;
 				context.messages.push(partialMessage);
 				addedPartial = true;
@@ -270,6 +306,8 @@ async function streamAssistantResponse(
 
 			case "done":
 			case "error": {
+				timer.step(`terminal-event:${event.type}`);
+				timer.end();
 				const finalMessage = await response.result();
 				if (addedPartial) {
 					context.messages[context.messages.length - 1] = finalMessage;
@@ -285,6 +323,8 @@ async function streamAssistantResponse(
 		}
 	}
 
+	timer.step("stream-finished-without-events");
+	timer.end();
 	return await response.result();
 }
 

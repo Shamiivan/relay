@@ -451,18 +451,36 @@ export async function runRelay(
   const runLogPath = `.runs/${slug}__${runTs}.log`;
 
   const thread = new Thread({ state: null, events: initialEvents });
+  let persistScheduled = false;
+
+  const persistThread = () => {
+    persistScheduled = false;
+    const serialized = thread.serializeForLLM();
+    writeSessionEvents(
+      contextDir,
+      activeSessionId,
+      thread.events,
+    );
+    writeRunLog(runLogPath, serialized);
+  };
+
+  const schedulePersist = () => {
+    if (persistScheduled) return;
+    persistScheduled = true;
+    setTimeout(persistThread, 0);
+  };
 
   // Patch append to emit every event through the transport and write continuously
   const _append = thread.append.bind(thread);
   thread.append = (event: ThreadEvent) => {
     _append(event);
+    const serialized = thread.serializeForLLM();
     if (DEBUG_THREAD) {
-      console.log(thread.serializeForLLM());
+      console.log(serialized);
     }
     // Fire-and-forget — transport decides whether to display
     transport.publishEvent(event).catch(() => {});
-    writeSessionEvents(contextDir, activeSessionId, thread.events);
-    writeRunLog(runLogPath, thread.serializeForLLM());
+    schedulePersist();
   };
 
   let completed = false;
@@ -562,6 +580,9 @@ export async function runRelay(
     try {
       await session.prompt(thread.serializeForLLM());
     } finally {
+      if (persistScheduled) {
+        persistThread();
+      }
       unsubscribe();
       session.dispose();
     }

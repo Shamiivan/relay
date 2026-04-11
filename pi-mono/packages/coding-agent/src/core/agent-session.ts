@@ -78,6 +78,7 @@ import { getLatestCompactionEntry } from "./session-manager.js";
 import type { SettingsManager } from "./settings-manager.js";
 import { BUILTIN_SLASH_COMMANDS, type SlashCommandInfo, type SlashCommandLocation } from "./slash-commands.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { createPhaseTimer } from "./timings.js";
 import type { BashOperations } from "./tools/bash.js";
 import { createAllTools } from "./tools/index.js";
 
@@ -804,12 +805,15 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
+		const promptTimer = createPhaseTimer("session.prompt");
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 
 		// Handle extension commands first (execute immediately, even during streaming)
 		// Extension commands manage their own LLM interaction via pi.sendMessage()
 		if (expandPromptTemplates && text.startsWith("/")) {
 			const handled = await this._tryExecuteExtensionCommand(text);
+			promptTimer.step("extension-command");
+			promptTimer.end();
 			if (handled) {
 				// Extension command executed, no prompt to send
 				return;
@@ -833,6 +837,7 @@ export class AgentSession {
 				currentImages = inputResult.images ?? currentImages;
 			}
 		}
+		promptTimer.step("input-hooks");
 
 		// Expand skill commands (/skill:name args) and prompt templates (/template args)
 		let expandedText = currentText;
@@ -840,6 +845,7 @@ export class AgentSession {
 			expandedText = this._expandSkillCommand(expandedText);
 			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 		}
+		promptTimer.step("template-expansion");
 
 		// If streaming, queue via steer() or followUp() based on option
 		if (this.isStreaming) {
@@ -853,6 +859,8 @@ export class AgentSession {
 			} else {
 				await this._queueSteer(expandedText, currentImages);
 			}
+			promptTimer.step("queue-streaming-message");
+			promptTimer.end();
 			return;
 		}
 
@@ -868,9 +876,10 @@ export class AgentSession {
 			);
 		}
 
-		// Validate API key
-		const apiKey = await this._modelRegistry.getApiKey(this.model);
-		if (!apiKey) {
+		// Fast preflight auth check only. The actual API key is resolved once in the agent loop
+		// immediately before the provider request so we don't duplicate potentially expensive
+		// OAuth refresh or config resolution work on every prompt.
+		if (!this._modelRegistry.authStorage.hasAuth(this.model.provider)) {
 			const isOAuth = this._modelRegistry.isUsingOAuth(this.model);
 			if (isOAuth) {
 				throw new Error(
@@ -884,12 +893,14 @@ export class AgentSession {
 					`Use /login or set an API key environment variable. See ${join(getDocsPath(), "providers.md")}`,
 			);
 		}
+		promptTimer.step("preflight-auth");
 
 		// Check if we need to compact before sending (catches aborted responses)
 		const lastAssistant = this._findLastAssistantMessage();
 		if (lastAssistant) {
 			await this._checkCompaction(lastAssistant, false);
 		}
+		promptTimer.step("compaction-check");
 
 		// Build messages array (custom message if any, then user message)
 		const messages: AgentMessage[] = [];
@@ -939,9 +950,13 @@ export class AgentSession {
 				this.agent.setSystemPrompt(this._baseSystemPrompt);
 			}
 		}
+		promptTimer.step("before-agent-start");
 
 		await this.agent.prompt(messages);
+		promptTimer.step("agent-prompt");
 		await this.waitForRetry();
+		promptTimer.step("wait-for-retry");
+		promptTimer.end();
 	}
 
 	/**

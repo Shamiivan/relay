@@ -32,6 +32,7 @@ export type ThreadEvent =
 export class Thread<TState = ThreadData> {
   readonly state: TState;
   readonly events: ThreadEvent[];
+  private serializedCache: string | null = null;
 
   constructor(args: {
     state: TState;
@@ -43,10 +44,16 @@ export class Thread<TState = ThreadData> {
 
   append(event: ThreadEvent): void {
     this.events.push(event);
+    this.serializedCache = null;
   }
 
   serializeForLLM(): string {
-    return this.events.map((event) => this.serializeEvent(event)).join("\n\n");
+    if (this.serializedCache === null) {
+      this.serializedCache = this.events
+        .map((event) => this.serializeEvent(event))
+        .join("\n\n");
+    }
+    return this.serializedCache;
   }
 
   private serializeEvent(event: ThreadEvent): string {

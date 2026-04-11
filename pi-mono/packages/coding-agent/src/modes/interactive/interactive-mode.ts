@@ -358,16 +358,24 @@ export class InteractiveMode {
 		}
 	}
 
+	private warmAutocompleteTools(): void {
+		void ensureTool("fd", true)
+			.then((fdPath) => {
+				if (!fdPath || fdPath === this.fdPath) return;
+				this.fdPath = fdPath;
+				this.setupAutocomplete(fdPath);
+				this.ui.requestRender();
+			})
+			.catch(() => {
+				// Best-effort only. Autocomplete continues to work without fd-backed file search.
+			});
+	}
+
 	async init(): Promise<void> {
 		if (this.isInitialized) return;
 
 		// Load changelog (only show new entries, skip for resumed sessions)
 		this.changelogMarkdown = this.getChangelogForDisplay();
-
-		// Ensure fd and rg are available (downloads if missing, adds to PATH via getBinDir)
-		// Both are needed: fd for autocomplete, rg for grep tool and bash commands
-		const [fdPath] = await Promise.all([ensureTool("fd"), ensureTool("rg")]);
-		this.fdPath = fdPath;
 
 		// Add header container as first child
 		this.ui.addChild(this.headerContainer);
@@ -448,18 +456,13 @@ export class InteractiveMode {
 		this.ui.addChild(this.editorContainer);
 		this.ui.addChild(this.widgetContainerBelow);
 		this.ui.addChild(this.footer);
+		this.setupAutocomplete(undefined);
 		this.ui.setFocus(this.editor);
 
 		this.setupKeyHandlers();
 		this.setupEditorSubmitHandler();
 
-		// Initialize extensions first so resources are shown before messages
-		await this.initExtensions();
-
-		// Render initial messages AFTER showing loaded resources
-		this.renderInitialMessages();
-
-		// Start the UI
+		// Start the UI before optional startup work so the terminal becomes interactive sooner.
 		this.ui.start();
 		this.isInitialized = true;
 
@@ -480,6 +483,14 @@ export class InteractiveMode {
 		this.footerDataProvider.onBranchChange(() => {
 			this.ui.requestRender();
 		});
+
+		this.warmAutocompleteTools();
+
+		// Initialize extensions first so resources are shown before messages
+		await this.initExtensions();
+
+		// Render initial messages AFTER showing loaded resources
+		this.renderInitialMessages();
 
 		// Initialize available provider count for footer display
 		await this.updateAvailableProviderCount();
