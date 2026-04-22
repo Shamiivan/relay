@@ -1,8 +1,35 @@
+# Dependencies
 node_modules
+
+# Build output
+dist/
+build/
+coverage/
+
+# Environment
 .env.local
+.env.*.local
+
+# Editor / tooling
+.vscode/
+.claude/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+.production/logs/
+
+# Relay runtime state
 .relay
 .runs
 .contexts
-AGENTS
+.context
 .tmp
-.production/logs/
+
+# Local agents scratchpad
+AGENTS

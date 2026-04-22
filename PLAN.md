@@ -72,9 +72,9 @@ https://mariozechner.at/posts/2025-11-30-pi-coding-agent/
 
 
 
-a couple of agent runtime examples, we can copy the code from them;
-/home/shami/workspaces/openclaw
-/home/shami/workspaces/pi-mono
-/home/shami/workspaces/langchain
+Reference agent runtimes worth studying:
+
+- [pi-mono](https://github.com/badlogic/pi-mono) — Mario Zechner's minimal coding agent
+- [LangChain](https://github.com/langchain-ai/langchain) — broader orchestration patterns
 
 ---
