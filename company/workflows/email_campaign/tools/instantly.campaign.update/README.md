@@ -51,7 +51,7 @@ Sender rotation example:
 ```bash
 printf '%s\n' '{
   "campaignId": "efccfc78-5cc8-45cf-82cd-c3671fc51d3a",
-  "email_list": ["ops1@billing-workflows.co", "ops2@billing-workflows.co"],
+  "email_list": ["ops1@example.com", "ops2@example.com"],
   "daily_limit": 50,
   "stop_on_auto_reply": true
 }' | company/workflows/email_campaign/tools/instantly.campaign.update/run

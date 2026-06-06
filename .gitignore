@@ -7,6 +7,7 @@ build/
 coverage/
 
 # Environment
+.env
 .env.local
 .env.*.local
 
@@ -26,6 +27,7 @@ logs/
 
 # Relay runtime state
 .relay
+.relay/logs/
 .runs
 .contexts
 .context
@@ -33,3 +35,6 @@ logs/
 
 # Local agents scratchpad
 AGENTS
+
+# Private company discovery material
+company/context/

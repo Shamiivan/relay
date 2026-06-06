@@ -29,7 +29,7 @@ test("shareCalendar grants access and returns ACL rule", async () => {
   const fake = createFakeClient();
 
   const result = await shareCalendar({
-    calendarId: "shamiivan@gmail.com",
+    calendarId: "primary",
     email: "alice@example.com",
     role: "reader",
   }, { client: fake.client });

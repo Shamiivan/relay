@@ -1,6 +1,5 @@
-import { LMStudioClient } from "@lmstudio/sdk";
 import type { Model } from "@mariozechner/pi-ai";
-import { Ollama } from "ollama/browser";
+import { loadLMStudioClientClass, loadOllamaClass } from "./lazy-deps.js";
 
 /**
  * Discover models from an Ollama server.
@@ -10,6 +9,7 @@ import { Ollama } from "ollama/browser";
  */
 export async function discoverOllamaModels(baseUrl: string, _apiKey?: string): Promise<Model<any>[]> {
 	try {
+		const Ollama = await loadOllamaClass();
 		// Create Ollama client
 		const ollama = new Ollama({ host: baseUrl });
 
@@ -208,6 +208,7 @@ export async function discoverVLLMModels(baseUrl: string, apiKey?: string): Prom
  */
 export async function discoverLMStudioModels(baseUrl: string, _apiKey?: string): Promise<Model<any>[]> {
 	try {
+		const LMStudioClient = await loadLMStudioClientClass();
 		// Extract host and port from baseUrl
 		const url = new URL(baseUrl);
 		const port = url.port ? parseInt(url.port, 10) : 1234;

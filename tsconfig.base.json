@@ -17,7 +17,6 @@
     "packages/**/*.ts",
     "playground/**/*.ts",
     "runtime/**/*.ts",
-    "tools/**/*.ts",
-    "convex/**/*.ts"
+    "tools/**/*.ts"
   ]
 }

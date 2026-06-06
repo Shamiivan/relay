@@ -31,7 +31,7 @@ printf '%s\n' '{
       }
     ]
   },
-  "email_list": ["ops@billing-workflows.co"],
+  "email_list": ["ops@example.com"],
   "daily_limit": 30,
   "stop_on_reply": true,
   "text_only": true,
@@ -57,7 +57,7 @@ printf '%s\n' '{
       }
     ]
   },
-  "email_list": ["founder@billing-workflows.co", "ops@billing-workflows.co"],
+  "email_list": ["founder@example.com", "ops@example.com"],
   "daily_limit": 40,
   "daily_max_leads": 20,
   "stop_on_reply": true,
@@ -70,7 +70,7 @@ Notes:
 - Keeping a top-level `campaign_schedule.timezone` is optional in Relay and is only used as a legacy fallback for filling missing schedule timezones.
 - Use an Instantly-supported timezone value. `America/Chicago` is confirmed by the current Instantly API docs.
 
-Verified command:
+Additional example:
 
 ```bash
 printf '%s\n' '{
@@ -85,7 +85,7 @@ printf '%s\n' '{
       }
     ]
   },
-  "email_list": ["ivan@teamavantechlabs.com"],
+  "email_list": ["sender@example.com"],
   "daily_limit": 30,
   "stop_on_reply": true,
   "text_only": true,
@@ -93,10 +93,4 @@ printf '%s\n' '{
   "open_tracking": false,
   "link_tracking": false
 }' | company/workflows/email_campaign/tools/instantly.campaign.create/run
-```
-
-Verified result on 2026-03-23:
-
-```json
-{"ok":true,"result":{"campaign":{"id":"1934d4bb-0d46-47fb-8ade-a6eeb32ca8be","name":"Hiring Angle - Draft","status":0,"timestampCreated":"2026-03-23T18:17:44.216Z","timestampUpdated":"2026-03-23T18:17:44.216Z"}}}
 ```
