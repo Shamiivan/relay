@@ -2,7 +2,7 @@
 
 ## Overview
 
-Relay runs on a GCP Compute Engine VM. Pushing to `main` auto-deploys via GitHub Actions.
+Relay can run on a GCP Compute Engine VM. Pushing to `main` auto-deploys via GitHub Actions when the deployment secrets are configured.
 
 ```
 git push origin main  →  GitHub Actions SSHs into VM  →  git pull + pnpm install + pm2 reload  →  live in ~30s
@@ -12,16 +12,16 @@ git push origin main  →  GitHub Actions SSHs into VM  →  git pull + pnpm ins
 
 | Component | Details |
 |-----------|---------|
-| **VM** | `relay-bot`, GCP Compute Engine, `us-east1-b` |
+| **VM** | GCP Compute Engine VM |
 | **Machine type** | `e2-medium` (1 vCPU shared, 4GB RAM) |
 | **OS** | Debian 12 |
 | **Disk** | 20GB pd-balanced |
-| **External IP** | `34.24.230.153` |
+| **External IP** | Static IP stored in the `VM_HOST` GitHub Actions secret |
 | **App user** | `relay` (home: `/home/relay/`) |
 | **App directory** | `/home/relay/app/` |
 | **Logs** | `/home/relay/logs/` |
 | **Process manager** | PM2 (auto-restarts on crash + boot) |
-| **GCP project** | `relay-bot-prod` |
+| **GCP project** | Your production GCP project |
 
 ## Files
 
@@ -37,7 +37,7 @@ Set in repo Settings → Secrets → Actions:
 
 | Secret | Value |
 |--------|-------|
-| `VM_HOST` | VM external IP (`34.24.230.153`) |
+| `VM_HOST` | VM external IP or hostname |
 | `VM_USERNAME` | `relay` |
 | `VM_SSH_KEY` | ed25519 private key for `relay` user on the VM |
 
@@ -52,27 +52,27 @@ Set in repo Settings → Secrets → Actions:
 ## SSH into the VM
 
 ```bash
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap
 ```
 
 ## Common operations
 
 ```bash
 # Check bot status
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo -u relay pm2 status"
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo -u relay pm2 status"
 
 # View live logs
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo -u relay pm2 logs relay-bot"
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo -u relay pm2 logs relay-bot"
 
 # View last 50 log lines
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo -u relay pm2 logs relay-bot --lines 50 --nostream"
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo -u relay pm2 logs relay-bot --lines 50 --nostream"
 
 # Restart manually
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo -u relay pm2 restart relay-bot"
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo -u relay pm2 restart relay-bot"
 
 # Copy .env.local to VM
-gcloud compute scp .env.local relay-bot:/tmp/.env.local --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo mv /tmp/.env.local /home/relay/app/.env.local && sudo chown relay:relay /home/relay/app/.env.local && sudo -u relay pm2 restart relay-bot"
+gcloud compute scp .env.local <vm-name>:/tmp/.env.local --project=<gcp-project> --zone=<zone> --tunnel-through-iap
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo mv /tmp/.env.local /home/relay/app/.env.local && sudo chown relay:relay /home/relay/app/.env.local && sudo -u relay pm2 restart relay-bot"
 ```
 
 ## Firewall
@@ -82,8 +82,8 @@ SSH (port 22) is open to your IP via `allow-ssh-myip-relay` (tag: `ssh-only`), p
 To update if your IP changes:
 
 ```bash
-gcloud compute firewall-rules update allow-ssh-myip-relay \
-  --project=relay-bot-prod \
+gcloud compute firewall-rules update <firewall-rule> \
+  --project=<gcp-project> \
   --source-ranges="$(curl -s ifconfig.me)/32"
 ```
 
@@ -93,9 +93,9 @@ If you ever need to rebuild the VM:
 
 ```bash
 # Create VM
-gcloud compute instances create relay-bot \
-  --project=relay-bot-prod \
-  --zone=us-east1-b \
+gcloud compute instances create <vm-name> \
+  --project=<gcp-project> \
+  --zone=<zone> \
   --machine-type=e2-medium \
   --image-family=debian-12 \
   --image-project=debian-cloud \
@@ -104,12 +104,12 @@ gcloud compute instances create relay-bot \
   --tags=ssh-only
 
 # SSH in and run setup (copy deploy/vm-setup.sh to VM first)
-gcloud compute scp deploy/vm-setup.sh relay-bot:/tmp/vm-setup.sh --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo bash /tmp/vm-setup.sh"
+gcloud compute scp deploy/vm-setup.sh <vm-name>:/tmp/vm-setup.sh --project=<gcp-project> --zone=<zone> --tunnel-through-iap
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo bash /tmp/vm-setup.sh"
 
 # Copy env
-gcloud compute scp .env.local relay-bot:/tmp/.env.local --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap
-gcloud compute ssh relay-bot --project=relay-bot-prod --zone=us-east1-b --tunnel-through-iap --command="sudo mv /tmp/.env.local /home/relay/app/.env.local && sudo chown relay:relay /home/relay/app/.env.local && sudo -u relay pm2 restart relay-bot"
+gcloud compute scp .env.local <vm-name>:/tmp/.env.local --project=<gcp-project> --zone=<zone> --tunnel-through-iap
+gcloud compute ssh <vm-name> --project=<gcp-project> --zone=<zone> --tunnel-through-iap --command="sudo mv /tmp/.env.local /home/relay/app/.env.local && sudo chown relay:relay /home/relay/app/.env.local && sudo -u relay pm2 restart relay-bot"
 
 # Set GitHub secrets
 gh secret set VM_HOST --repo Shamiivan/relay --body "<VM_IP>"

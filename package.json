@@ -12,7 +12,6 @@
     "start": "tsx apps/bot/src/index.ts",
     "bot": "tsx apps/bot/src/index.ts",
     "gmail:connect": "tsx tools/gmail.connect.ts",
-    "tools:codegen": "tsx tools/codegen.ts",
     "check": "tsc -p tsconfig.base.json --noEmit",
     "test": "node --import tsx --test \"tools/**/*.test.ts\" \"tasks/**/*.test.ts\" \"runtime/tests/**/*.test.ts\" \"company/workflows/**/*.test.ts\""
   },

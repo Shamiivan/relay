@@ -1,14 +1,12 @@
 import "@mariozechner/mini-lit/dist/ModeToggle.js";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
-import { renderAsync } from "docx-preview";
 import { html, LitElement } from "lit";
 import { state } from "lit/decorators.js";
 import { Download, X } from "lucide";
-import * as pdfjsLib from "pdfjs-dist";
-import * as XLSX from "xlsx";
 import type { Attachment } from "../utils/attachment-utils.js";
 import { i18n } from "../utils/i18n.js";
+import { loadDocxRenderAsync, loadPdfJs, loadXlsx } from "../utils/lazy-deps.js";
 
 type FileType = "image" | "pdf" | "docx" | "pptx" | "excel" | "text";
 
@@ -307,6 +305,7 @@ export class AttachmentOverlay extends LitElement {
 		let pdf: any = null;
 
 		try {
+			const pdfjsLib = await loadPdfJs();
 			// Convert base64 to ArrayBuffer
 			const arrayBuffer = this.base64ToArrayBuffer(this.attachment.content);
 
@@ -385,6 +384,7 @@ export class AttachmentOverlay extends LitElement {
 		if (!container || !this.attachment) return;
 
 		try {
+			const renderAsync = await loadDocxRenderAsync();
 			// Convert base64 to ArrayBuffer
 			const arrayBuffer = this.base64ToArrayBuffer(this.attachment.content);
 
@@ -486,6 +486,7 @@ export class AttachmentOverlay extends LitElement {
 		if (!container || !this.attachment) return;
 
 		try {
+			const XLSX = await loadXlsx();
 			// Convert base64 to ArrayBuffer
 			const arrayBuffer = this.base64ToArrayBuffer(this.attachment.content);
 
@@ -518,7 +519,7 @@ export class AttachmentOverlay extends LitElement {
 					const sheetDiv = document.createElement("div");
 					sheetDiv.style.display = index === 0 ? "flex" : "none";
 					sheetDiv.className = "flex-1 overflow-auto";
-					sheetDiv.appendChild(this.renderExcelSheet(workbook.Sheets[sheetName], sheetName));
+					sheetDiv.appendChild(this.renderExcelSheet(XLSX, workbook.Sheets[sheetName], sheetName));
 					sheetContents.push(sheetDiv);
 
 					// Tab click handler
@@ -548,7 +549,7 @@ export class AttachmentOverlay extends LitElement {
 			} else {
 				// Single sheet
 				const sheetName = workbook.SheetNames[0];
-				wrapper.appendChild(this.renderExcelSheet(workbook.Sheets[sheetName], sheetName));
+				wrapper.appendChild(this.renderExcelSheet(XLSX, workbook.Sheets[sheetName], sheetName));
 			}
 		} catch (error: any) {
 			console.error("Error rendering Excel:", error);
@@ -556,7 +557,7 @@ export class AttachmentOverlay extends LitElement {
 		}
 	}
 
-	private renderExcelSheet(worksheet: any, sheetName: string): HTMLElement {
+	private renderExcelSheet(XLSX: Awaited<ReturnType<typeof loadXlsx>>, worksheet: any, sheetName: string): HTMLElement {
 		const sheetDiv = document.createElement("div");
 
 		// Generate HTML table

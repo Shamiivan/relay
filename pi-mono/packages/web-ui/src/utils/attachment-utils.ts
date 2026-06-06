@@ -1,12 +1,6 @@
-import { parseAsync } from "docx-preview";
-import JSZip from "jszip";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import * as pdfjsLib from "pdfjs-dist";
-import * as XLSX from "xlsx";
 import { i18n } from "./i18n.js";
-
-// Configure PDF.js worker - we'll need to bundle this
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+import { loadDocxParseAsync, loadJsZip, loadPdfJs, loadXlsx } from "./lazy-deps.js";
 
 export interface Attachment {
 	id: string;
@@ -206,6 +200,7 @@ async function processPdf(
 ): Promise<{ extractedText: string; preview?: string }> {
 	let pdf: PDFDocumentProxy | null = null;
 	try {
+		const pdfjsLib = await loadPdfJs();
 		pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
 		// Extract text with page structure
@@ -271,6 +266,7 @@ async function generatePdfPreview(pdf: PDFDocumentProxy): Promise<string | undef
 
 async function processDocx(arrayBuffer: ArrayBuffer, fileName: string): Promise<{ extractedText: string }> {
 	try {
+		const parseAsync = await loadDocxParseAsync();
 		// Parse document structure
 		const wordDoc = await parseAsync(arrayBuffer);
 
@@ -362,6 +358,7 @@ function extractTextFromElement(element: any): string {
 
 async function processPptx(arrayBuffer: ArrayBuffer, fileName: string): Promise<{ extractedText: string }> {
 	try {
+		const JSZip = await loadJsZip();
 		// Load the PPTX file as a ZIP
 		const zip = await JSZip.loadAsync(arrayBuffer);
 
@@ -388,13 +385,13 @@ async function processPptx(arrayBuffer: ArrayBuffer, fileName: string): Promise<
 				const textMatches = slideXml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g);
 
 				if (textMatches) {
-					extractedText += `\n<slide number="${i + 1}">`;
-					const slideTexts = textMatches
-						.map((match) => {
-							const textMatch = match.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
-							return textMatch ? textMatch[1] : "";
-						})
-						.filter((t) => t.trim());
+						extractedText += `\n<slide number="${i + 1}">`;
+						const slideTexts = textMatches
+							.map((match: string) => {
+								const textMatch = match.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
+								return textMatch ? textMatch[1] : "";
+							})
+							.filter((t: string) => t.trim());
 
 					if (slideTexts.length > 0) {
 						extractedText += `\n${slideTexts.join("\n")}`;
@@ -420,13 +417,13 @@ async function processPptx(arrayBuffer: ArrayBuffer, fileName: string): Promise<
 				if (file) {
 					const noteXml = await file.async("text");
 					const textMatches = noteXml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g);
-					if (textMatches) {
-						const noteTexts = textMatches
-							.map((match) => {
-								const textMatch = match.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
-								return textMatch ? textMatch[1] : "";
-							})
-							.filter((t) => t.trim());
+						if (textMatches) {
+							const noteTexts = textMatches
+								.map((match: string) => {
+									const textMatch = match.match(/<a:t[^>]*>([^<]+)<\/a:t>/);
+									return textMatch ? textMatch[1] : "";
+								})
+								.filter((t: string) => t.trim());
 
 						if (noteTexts.length > 0) {
 							const slideNum = noteFile.match(/notesSlide(\d+)\.xml$/)?.[1];
@@ -448,6 +445,7 @@ async function processPptx(arrayBuffer: ArrayBuffer, fileName: string): Promise<
 
 async function processExcel(arrayBuffer: ArrayBuffer, fileName: string): Promise<{ extractedText: string }> {
 	try {
+		const XLSX = await loadXlsx();
 		// Read the workbook
 		const workbook = XLSX.read(arrayBuffer, { type: "array" });
 

@@ -1,82 +1,137 @@
 # Relay
 
-Relay is a narrow workspace agent built one use case at a time. The current tool set covers Gmail for email access, Google Drive for file lookup, Google Docs for reading and editing documents, and Google Sheets for spreadsheet reads and row appends.
-Strong typing is a project rule: parse inputs at the boundary, keep result shapes explicit, and avoid `any` or loose records in core paths.
-Persistence runs through Convex, and machine-owned config lives in JSON.
-Execution happens in a local worker process, while Convex stores sessions, session messages, runs, run steps, tool calls, and runtime events in `/convex`.
+Relay is a local-first workspace agent for running company workflows through a CLI or Discord bot. It gives the model a narrow contract: discover workflow instructions, call command-backed tools, ask for clarification when needed, and finish through an explicit handoff.
 
-## Current Shape
+The current workspace includes:
 
-The current vertical slice is: Discord message in, run persisted in Convex, local worker discovers command tools from `tools/`, executes them through one specialist, reply back to Discord.
-The backend source of truth lives directly in `convex`, the worker lives in `runtime/src`, prompts and static context stay in Markdown, and config stays in JSON.
+- a TypeScript runtime in `runtime/`
+- CLI and Discord transports in `cli.ts`, `transports/`, and `apps/bot/`
+- typed command-backed tools in `tools/`
+- workflow-facing task/tool wrappers in `tasks/` and `company/workflows/`
+- company context under `company/`
+- deployment support under `deploy/` and `pm2.config.cjs`
+- a vendored/file-linked `pi-mono/` dependency used by the runtime
 
-## Company Context
+## Requirements
 
-Root `workflows/` is for generic, reusable workflows.
-`company/` is for company-specific context, discovery material, and workflows that depend on one company's operating reality.
+- Node.js 22
+- pnpm 10.0.0
+- At least one model API key for the coding-agent runtime
+- Optional integration credentials for Discord, Google Workspace, Apollo, Instantly, Brave, or Reddit depending on the workflows you run
 
-When a workflow needs company context first, put that workflow under `company/workflows/` and make the discovery step explicit.
-Company background should live alongside the workflow in `company/<name>/` rather than in a separate sibling repo.
+## Setup
 
-Relay keeps one architectural rule intentionally narrow:
-
-- session history is for humans
-- run steps are for the runtime
-
-That means:
-
-- `sessionMessages` stores only visible `user_message` and `assistant_message`
-- `runSteps` stores coarse runtime stages for one run
-- `toolCalls` stores one record per tool invocation
-- `events` stores append-only runtime audit history
-- the worker compiles a fresh model request each turn instead of replaying mixed event history
-
-## How To Read
-
-Read the repo by following one request through the system.
-
-1. Start with [PLAN.md](/home/shami/workspaces/relay/PLAN.md) for the design constraints and [configs/specialists/communication.json](/home/shami/workspaces/relay/configs/specialists/communication.json) for the active specialist.
-2. Read [apps/bot/src/index.ts](/home/shami/workspaces/relay/apps/bot/src/index.ts) to see how Discord creates a run and waits for the result.
-3. Read [convex/runs.ts](/home/shami/workspaces/relay/convex/runs.ts), [convex/sessionMessages.ts](/home/shami/workspaces/relay/convex/sessionMessages.ts), [convex/runSteps.ts](/home/shami/workspaces/relay/convex/runSteps.ts), [convex/toolCalls.ts](/home/shami/workspaces/relay/convex/toolCalls.ts), and [convex/events.ts](/home/shami/workspaces/relay/convex/events.ts) to see what is stored durably.
-4. Read [runtime/src/compile/compile-run-input.ts](/home/shami/workspaces/relay/runtime/src/compile/compile-run-input.ts) and [runtime/src/compile/replay-session-messages.ts](/home/shami/workspaces/relay/runtime/src/compile/replay-session-messages.ts) to see how visible session history, run steps, and tool-call results become one compiled model request.
-5. Read [runtime/src/worker.ts](/home/shami/workspaces/relay/runtime/src/worker.ts), [runtime/src/execution/run-loop.ts](/home/shami/workspaces/relay/runtime/src/execution/run-loop.ts), and [runtime/src/execution/open-loop.ts](/home/shami/workspaces/relay/runtime/src/execution/open-loop.ts) to see how the local runtime dispatches execution, calls the model adapter, executes tools, and writes results back.
-6. Read [runtime/src/tools.ts](/home/shami/workspaces/relay/runtime/src/tools.ts), [tools/gmail.search/run.ts](/home/shami/workspaces/relay/tools/gmail.search/run.ts), [tools/gmail.read/run.ts](/home/shami/workspaces/relay/tools/gmail.read/run.ts), [tools/drive.search/run.ts](/home/shami/workspaces/relay/tools/drive.search/run.ts), [tools/drive.getFile/run.ts](/home/shami/workspaces/relay/tools/drive.getFile/run.ts), [tools/gsheets.readValues/run.ts](/home/shami/workspaces/relay/tools/gsheets.readValues/run.ts), and [tools/gsheets.appendRow/run.ts](/home/shami/workspaces/relay/tools/gsheets.appendRow/run.ts) for the actual tool integrations.
-7. Read [convex/schema.ts](/home/shami/workspaces/relay/convex/schema.ts) last to confirm the storage model.
-
-## Running
-
-Use `pnpm dev` to start Convex, the local worker, and the Discord bot together.
-Use `pnpm check` to typecheck the full repo.
-
-## Connect Gmail
-
-Relay already calls Google Workspace APIs through local tool commands. To connect Gmail, Google Drive, Google Docs, and Google Sheets, you need Google OAuth client credentials plus one refresh token in `.env.local`.
-
-Add these keys:
-
-```env
-CONVEX_URL=...
-DISCORD_TOKEN=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REFRESH_TOKEN=...
+```bash
+pnpm install
+cp .env.example .env.local
 ```
 
-Create a Google OAuth app with Gmail API enabled and add one redirect URI, for example `http://127.0.0.1:3000/oauth2callback`.
+Fill only the environment variables needed for your run. For a basic CLI run, start with a model key such as `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`.
 
-Generate the refresh token with the smoother local callback flow:
+## Running Relay
+
+Run a one-off CLI request:
+
+```bash
+pnpm relay -- "What time is it?"
+```
+
+List paused sessions:
+
+```bash
+pnpm relay -- list
+pnpm relay -- list --all
+```
+
+Resume or fork a paused session:
+
+```bash
+pnpm relay -- resume <session-id>
+pnpm relay -- fork <session-id>
+```
+
+Run the Discord bot:
+
+```bash
+pnpm start
+```
+
+The Discord bot requires `DISCORD_TOKEN` in `.env.local`.
+
+## Google Workspace OAuth
+
+Google Workspace tools use OAuth credentials from `.env.local`:
+
+```env
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+```
+
+Create a Google OAuth app with the required Workspace APIs enabled, then generate a refresh token:
 
 ```bash
 pnpm gmail:connect
 ```
 
-This opens the browser, listens on `http://127.0.0.1:3000/oauth2callback`, and prints the `GOOGLE_REFRESH_TOKEN` value to place in `.env.local`.
-The consent flow now requests a broad Google Workspace scope set for Gmail, Drive, Docs, Sheets, and Calendar so new tools in those domains do not require another re-consent later.
+The helper listens on `http://127.0.0.1:3000/oauth2callback` and prints the refresh token to place in `.env.local`.
 
-If you previously generated a refresh token before Drive write or Docs access were added, generate a fresh token again. Older tokens can search/read Drive but still fail when Relay tries to copy or edit documents.
-
-Manual mode is still available if you want to paste a code yourself:
+## Development
 
 ```bash
-pnpm gmail:connect -- --redirect-uri=http://127.0.0.1:3000/oauth2callback --code=PASTE_CODE_HERE
+pnpm check
+pnpm test
 ```
+
+`pnpm check` runs TypeScript with `tsconfig.base.json`. `pnpm test` runs Node's test runner across tool, task, runtime, and company workflow tests.
+
+CI runs the same checks on GitHub Actions using Node 22 and pnpm 10.0.0.
+
+## Project Structure
+
+| Path | Purpose |
+| --- | --- |
+| `cli.ts` | CLI entry point for new, resumed, and forked sessions |
+| `apps/bot/` | Discord bot transport |
+| `runtime/` | Agent loop, local session persistence, thread serialization, and runtime helpers |
+| `transports/` | CLI, TUI, and Discord adapters |
+| `tools/` | Typed tool declarations and integration clients |
+| `tasks/` | Reusable task declarations and runnable task wrappers |
+| `company/` | Company-specific context and workflows |
+| `packages/` | Small shared packages for contracts, env loading, and logging |
+| `deploy/` | VM deployment notes and setup scripts |
+| `pi-mono/` | Local package dependency used by Relay |
+
+Runtime state is written to ignored local directories such as `.contexts/`, `.runs/`, `.context/`, `.tmp/`, and `.relay/`.
+
+## Tool And Workflow Contract
+
+Workflow tools are executable commands that read JSON from stdin and write typed JSON to stdout:
+
+```json
+{ "ok": true, "result": { } }
+{ "ok": false, "error": { "type": "error_type", "message": "Human readable detail" } }
+```
+
+Typed tools live under `tools/<provider>/<tool.name>/tool.ts` and usually use `defineTool()` plus `runDeclaredTool()` from `tools/sdk.ts`.
+
+Workflow-facing shims live under `company/workflows/<workflow>/tools/` as either:
+
+- a flat executable file for simple shims
+- a directory with `run`, `README.md`, and `package.json` for larger tools
+
+Document workflow behavior in `company/workflows/<workflow>/README.md` so the runtime can discover and use it safely.
+
+## Deployment
+
+Production deployment is documented in `deploy/DEPLOYMENT.md`. The GitHub workflow deploys from `main` after CI passes, then restarts the PM2 process defined in `pm2.config.cjs`.
+
+Keep deployment credentials in GitHub Actions secrets and runtime credentials in `.env.local`; never commit secrets.
+
+## Contributing
+
+See `CONTRIBUTING.md` for contribution workflow, quality checks, and documentation expectations.
+
+## License
+
+MIT. See `LICENSE`.

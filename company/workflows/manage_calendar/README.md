@@ -93,7 +93,7 @@ Grant another user access to a calendar. Roles: freeBusyReader, reader, writer, 
 Fields: `calendarId`, `email`, `role`, `sendNotifications?` (default true)
 
 ```bash
-printf '{"calendarId":"shamiivan@gmail.com","email":"alice@example.com","role":"reader"}' | tsx tools/gworkspace/calendar/calendar.shareCalendar/tool.ts
+printf '{"calendarId":"primary","email":"alice@example.com","role":"reader"}' | tsx tools/gworkspace/calendar/calendar.shareCalendar/tool.ts
 ```
 
 ### calendar.listSharing
@@ -103,7 +103,7 @@ List who has access to a calendar and their roles. Returns rule IDs needed by re
 Fields: `calendarId`
 
 ```bash
-printf '{"calendarId":"shamiivan@gmail.com"}' | tsx tools/gworkspace/calendar/calendar.listSharing/tool.ts
+printf '{"calendarId":"primary"}' | tsx tools/gworkspace/calendar/calendar.listSharing/tool.ts
 ```
 
 ### calendar.removeSharing
@@ -113,7 +113,7 @@ Revoke a user's access to a calendar. Destructive.
 Fields: `calendarId`, `ruleId`
 
 ```bash
-printf '{"calendarId":"shamiivan@gmail.com","ruleId":"user:alice@example.com"}' | tsx tools/gworkspace/calendar/calendar.removeSharing/tool.ts
+printf '{"calendarId":"primary","ruleId":"user:alice@example.com"}' | tsx tools/gworkspace/calendar/calendar.removeSharing/tool.ts
 ```
 
 ### calendar.moveEvent

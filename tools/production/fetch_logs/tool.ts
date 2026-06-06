@@ -5,10 +5,10 @@ import { defineTool, runDeclaredTool } from "../../sdk";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const LOCAL_LOGS = path.join(REPO_ROOT, ".production/logs");
-const VM_NAME = "relay-bot";
-const VM_ZONE = "us-east1-b";
-const VM_PROJECT = "relay-bot-prod";
-const REMOTE_RUNS = "/home/relay/app/.runs/";
+const VM_NAME = process.env.RELAY_PRODUCTION_VM_NAME;
+const VM_ZONE = process.env.RELAY_PRODUCTION_VM_ZONE;
+const VM_PROJECT = process.env.RELAY_PRODUCTION_GCP_PROJECT;
+const REMOTE_RUNS = process.env.RELAY_PRODUCTION_RUNS_PATH ?? "/home/relay/app/.runs/";
 
 export const fetchLogsTool = defineTool({
   name: "production.fetch_logs",
@@ -23,6 +23,12 @@ export const fetchLogsTool = defineTool({
     destination: z.string(),
   }),
   async handler() {
+    if (!VM_NAME || !VM_ZONE || !VM_PROJECT) {
+      throw new Error(
+        "Set RELAY_PRODUCTION_VM_NAME, RELAY_PRODUCTION_VM_ZONE, and RELAY_PRODUCTION_GCP_PROJECT before fetching production logs.",
+      );
+    }
+
     try {
       execSync("which gcloud", { stdio: "ignore" });
     } catch {

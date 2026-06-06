@@ -4,8 +4,8 @@ Packages hold reusable code. Keep boundaries narrow so each package does one job
 
 Current package boundary worth preserving:
 
-- `packages/model`: provider-facing model adapter logic
 - `packages/contracts`: config and schema contracts
+- `packages/env`: shared dotenv loading helpers
 - `packages/logger`: shared logging
 
-The model package should stay small: validate messages, build provider payloads, and parse responses.
+Keep packages small and boring. If code is specific to one workflow, tool, or transport, leave it in that area instead of promoting it into `packages/`.

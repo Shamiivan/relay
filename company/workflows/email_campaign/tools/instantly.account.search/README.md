@@ -24,5 +24,5 @@ printf '%s\n' '{"limit":10}' | company/workflows/email_campaign/tools/instantly.
 Sender lookup example:
 
 ```bash
-printf '%s\n' '{"search":"ops@billing-workflows.co","limit":5}' | company/workflows/email_campaign/tools/instantly.account.search/run
+printf '%s\n' '{"search":"ops@example.com","limit":5}' | company/workflows/email_campaign/tools/instantly.account.search/run
 ```

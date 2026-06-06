@@ -58,47 +58,55 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  apps/cli:
-    dependencies:
-      '@relay/transport':
-        specifier: workspace:*
-        version: link:../../packages/transport
-      '@relay/tui':
-        specifier: workspace:*
-        version: link:../../packages/tui
-      cac:
-        specifier: ^6.7.14
-        version: 6.7.14
+  company/workflows/bug_report/tools/cancel: {}
 
-  apps/inspector: {}
+  company/workflows/bug_report/tools/create_bug_report: {}
+
+  company/workflows/bug_report/tools/list_bug_reports: {}
+
+  company/workflows/email_campaign/tools/apollo.search_people: {}
+
+  company/workflows/email_campaign/tools/file.update: {}
+
+  company/workflows/email_campaign/tools/file.write: {}
+
+  company/workflows/email_campaign/tools/instantly.account.search: {}
+
+  company/workflows/email_campaign/tools/instantly.campaign.activate: {}
+
+  company/workflows/email_campaign/tools/instantly.campaign.create: {}
+
+  company/workflows/email_campaign/tools/instantly.campaign.update: {}
+
+  company/workflows/email_campaign/tools/instantly.lead.add: {}
+
+  company/workflows/email_campaign/tools/web.fetch: {}
+
+  company/workflows/email_campaign/tools/web.search: {}
+
+  company/workflows/feature_request/tools/cancel: {}
+
+  company/workflows/feature_request/tools/create_feature_request: {}
+
+  company/workflows/feature_request/tools/list_feature_requests: {}
+
+  company/workflows/manage_drive/tools/drive.copy: {}
+
+  company/workflows/manage_drive/tools/drive.getFile: {}
+
+  company/workflows/manage_drive/tools/drive.search: {}
+
+  company/workflows/manage_drive/tools/drive.upload: {}
+
+  company/workflows/session_manager/tools/list_sessions: {}
+
+  company/workflows/session_manager/tools/resume_session: {}
 
   packages/env: {}
 
-  packages/transport: {}
+  tasks/bug_report.create: {}
 
-  packages/tui: {}
-
-  workflows/board-meeting-prep/tasks/find-reference-doc: {}
-
-  workflows/board-meeting-prep/tools/docs.read: {}
-
-  workflows/board-meeting-prep/tools/docs.write: {}
-
-  workflows/board-meeting-prep/tools/drive.copy: {}
-
-  workflows/board-meeting-prep/tools/drive.search: {}
-
-  workflows/public_web_search/tools/web.fetch: {}
-
-  workflows/public_web_search/tools/web.fetch-llm: {}
-
-  workflows/public_web_search/tools/web.search: {}
-
-  workflows/sales_prospect_research/tools/web.fetch: {}
-
-  workflows/sales_prospect_research/tools/web.fetch-llm: {}
-
-  workflows/sales_prospect_research/tools/web.search: {}
+  tasks/feature_request.create: {}
 
 packages:
 
